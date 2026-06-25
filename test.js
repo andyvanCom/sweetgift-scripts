@@ -215,7 +215,6 @@ SweetGift.ru | Live Activity Popup v4
   }
 
   function showPopup(item) {
-    console.log('[SG Popup] showPopup()', item);
     if (!item || !item.title || !item.product_key) return;
     if (document.querySelector('.sg-live-popup')) return;
 
@@ -238,7 +237,6 @@ SweetGift.ru | Live Activity Popup v4
       '<button class="sg-live-close" type="button" aria-label="Закрыть">×</button>';
 
     document.body.appendChild(popup);
-    console.log('[SG Popup] popup added to DOM');
 
     var closeBtn = popup.querySelector('.sg-live-close');
 
@@ -250,7 +248,6 @@ SweetGift.ru | Live Activity Popup v4
 
     setTimeout(function () {
       popup.classList.add('is-visible');
-      console.log('[SG Popup] popup visible');
     }, 100);
 
     setTimeout(function () {
@@ -296,23 +293,17 @@ SweetGift.ru | Live Activity Popup v4
 
   function init() {
     safe(function () {
+      log('Init');
 
-        log('Init');
+      if (sessionStorage.getItem(CONFIG.sessionKey)) {
+        log('Already shown in this session');
+        return;
+      }
 
-        var isTestMode =
-            window.location.search.indexOf('testpopup=1') !== -1;
-
-        if (!isTestMode && sessionStorage.getItem(CONFIG.sessionKey)) {
-            log('Already shown in this session');
-            return;
-        }
-
-        setTimeout(function () {
-            loadActivity();
-        }, isTestMode ? 1000 : CONFIG.popupDelay);
-
+      setTimeout(loadActivity, CONFIG.popupDelay);
     });
-}
+  }
+
   window.SG.livePopup = {
     init: init,
     showTest: function () {
