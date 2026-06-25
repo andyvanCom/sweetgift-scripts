@@ -148,7 +148,8 @@ SweetGift.ru | Live Activity Popup v4
   .sg-live-popup{
     left:12px;
     right:12px;
-    bottom:16px;
+    bottom:120px;
+    border:4px solid red;
     width:auto;
     max-width:none;
     grid-template-columns:58px 1fr 22px;
