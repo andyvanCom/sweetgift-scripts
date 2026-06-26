@@ -3,7 +3,7 @@
   "modules": [
     {
       "name": "product-analytics",
-      "enabled": true,
+      "enabled": false,
       "src": "sweetgift-product-analytics.js",
       "version": "1",
       "pages": ["all"]
