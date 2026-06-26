@@ -6,18 +6,21 @@
       "enabled": true,
       "src": "sweetgift-product-badges.js",
       "version": "1",
-      "pages": [
-        "all"
-      ]
+      "pages": ["all"]
     },
     {
       "name": "live-popup",
       "enabled": true,
       "src": "sweetgift-live-popup.js",
       "version": "1",
-      "pages": [
-        "all"
-      ]
+      "pages": ["all"]
+    },
+    {
+      "name": "product-analytics",
+      "enabled": true,
+      "src": "sweetgift-product-analytics.js",
+      "version": "1",
+      "pages": ["all"]
     }
   ]
 }
