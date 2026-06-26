@@ -16,8 +16,8 @@ SweetGift.ru | Live Activity Popup v4
   var CONFIG = {
     supabaseUrl: 'https://rvgvbxipccbkytmhltmi.supabase.co',
     supabaseKey: 'sb_publishable_JrPJQVLLpcDxjte5OSCnvg_ocvpBqqT',
-    popupDelay: 3000,
-    visibleTime: 20000,
+    popupDelay: 12000,
+    visibleTime: 25000,
     sessionKey: 'sg_live_popup_shown_v4',
     cssId: 'sg-live-popup-css-v4'
   };
