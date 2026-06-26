@@ -53,7 +53,7 @@ SweetGift.ru | Product Real Activity Badges
 
     views: {
       enabled: true,
-      min: 30,
+      min: 25,
       icon: '👀',
       text: 'Часто смотрят',
       tip: 'Карточку этого товара часто открывают'
