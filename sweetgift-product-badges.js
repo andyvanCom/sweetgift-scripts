@@ -21,7 +21,7 @@ SweetGift.ru | Product Real Activity Badges
   var BADGES = {
     shares: {
       enabled: true,
-      min: 5,
+      min: 3,
       icon: '📤',
       text: 'Этим товаром делятся',
       tip: 'Покупатели делятся ссылкой на этот товар'
@@ -29,7 +29,7 @@ SweetGift.ru | Product Real Activity Badges
 
     cart: {
       enabled: true,
-      min: 10,
+      min: 5,
       icon: '🛒',
       text: 'Часто добавляют в корзину',
       tip: 'Этот товар часто добавляют в корзину'
@@ -45,7 +45,7 @@ SweetGift.ru | Product Real Activity Badges
 
     favorites: {
       enabled: true,
-      min: 10,
+      min: 5,
       icon: '❤️',
       text: 'Часто сохраняют',
       tip: 'Этот товар часто добавляют в избранное'
@@ -53,7 +53,7 @@ SweetGift.ru | Product Real Activity Badges
 
     views: {
       enabled: true,
-      min: 100,
+      min: 30,
       icon: '👀',
       text: 'Часто смотрят',
       tip: 'Карточку этого товара часто открывают'
