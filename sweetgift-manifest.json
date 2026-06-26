@@ -1,6 +1,13 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "modules": [
+    {
+      "name": "product-analytics",
+      "enabled": true,
+      "src": "sweetgift-product-analytics.js",
+      "version": "1",
+      "pages": ["all"]
+    },
     {
       "name": "product-badges",
       "enabled": true,
@@ -12,13 +19,6 @@
       "name": "live-popup",
       "enabled": true,
       "src": "sweetgift-live-popup.js",
-      "version": "1",
-      "pages": ["all"]
-    },
-    {
-      "name": "product-analytics",
-      "enabled": true,
-      "src": "sweetgift-product-analytics.js",
       "version": "1",
       "pages": ["all"]
     }
