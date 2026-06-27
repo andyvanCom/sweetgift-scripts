@@ -181,13 +181,20 @@ SweetGift.ru | Product Real Activity Badges
     if (!priceWrapper) return;
 
     var el = document.createElement('div');
-    el.className = 'js-store-sold-out t-descr t-descr_xxs sg-product-activity';
+    el.className = 'js-store-sold-out t-descr sg-product-activity';
     el.setAttribute('data-tooltip', badge.tip || badge.text);
     el.setAttribute('data-sg-real-badge', '1');
 
+    el.style.marginTop = '10px';
+    el.style.marginBottom = '12px';
+    el.style.color = '#222';
+    el.style.fontSize = '15px';
+    el.style.lineHeight = '1.45';
+    el.style.fontWeight = '400';
+
     el.innerHTML =
-      '<span class="emoji">' + badge.icon + '</span>' +
-      '<span class="text">' + badge.text + '</span>';
+    '<span class="emoji" style="margin-right:6px;">' + badge.icon + '</span>' +
+    '<span class="text">' + badge.text + '</span>';
 
     if (node.classList.contains('t-store__product-snippet') || node.classList.contains('t-store__prod-popup__info')) {
       priceWrapper.after(el);
