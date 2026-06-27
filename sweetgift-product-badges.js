@@ -18,6 +18,38 @@ SweetGift.ru | Product Real Activity Badges
     debug: false
   };
 
+  function injectCss() {
+  if (document.getElementById('sg-product-badges-css')) return;
+
+  var style = document.createElement('style');
+  style.id = 'sg-product-badges-css';
+
+  style.textContent = `
+.sg-product-activity{
+  display:flex !important;
+  align-items:center !important;
+  gap:7px !important;
+  margin-top:10px !important;
+  margin-bottom:12px !important;
+  font-size:15px !important;
+  line-height:1.45 !important;
+  color:#222 !important;
+  font-weight:400 !important;
+}
+
+.sg-product-activity .emoji{
+  font-size:16px !important;
+  line-height:1 !important;
+}
+
+.sg-product-activity .text{
+  color:#222 !important;
+}
+`;
+
+  document.head.appendChild(style);
+}
+
   var BADGES = {
     shares: {
       enabled: true,
@@ -185,12 +217,7 @@ SweetGift.ru | Product Real Activity Badges
     el.setAttribute('data-tooltip', badge.tip || badge.text);
     el.setAttribute('data-sg-real-badge', '1');
 
-    el.style.marginTop = '10px';
-    el.style.marginBottom = '12px';
-    el.style.color = '#222';
-    el.style.fontSize = '15px';
-    el.style.lineHeight = '1.45';
-    el.style.fontWeight = '400';
+
 
     el.innerHTML =
     '<span class="emoji" style="margin-right:6px;">' + badge.icon + '</span>' +
@@ -222,8 +249,9 @@ SweetGift.ru | Product Real Activity Badges
       renderBadge(node, pickBadge(item));
     });
   }
+    function run() {
+    injectCss();
 
-  function run() {
     var nodes = getProductNodes();
 
     if (!nodes.length) return;
