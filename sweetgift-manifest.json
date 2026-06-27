@@ -1,13 +1,6 @@
 {
-  "version": "1.0.1",
+  "version": "1.0.2",
   "modules": [
-    {
-      "name": "product-analytics",
-      "enabled": false,
-      "src": "sweetgift-product-analytics.js",
-      "version": "1",
-      "pages": ["all"]
-    },
     {
       "name": "product-badges",
       "enabled": true,
@@ -19,6 +12,20 @@
       "name": "live-popup",
       "enabled": true,
       "src": "sweetgift-live-popup.js",
+      "version": "1",
+      "pages": ["all"]
+    },
+    {
+      "name": "article-stats",
+      "enabled": true,
+      "src": "sweetgift-article-stats.js",
+      "version": "1",
+      "pages": ["/stati/*"]
+    },
+    {
+      "name": "product-analytics",
+      "enabled": false,
+      "src": "sweetgift-product-analytics.js",
       "version": "1",
       "pages": ["all"]
     }
