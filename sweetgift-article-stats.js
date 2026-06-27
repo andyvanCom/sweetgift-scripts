@@ -104,20 +104,11 @@ SweetGift.ru | Article Stats
 }
 
 .sg-down-item,
-.sg-down-share,
 .sg-down-like{
   position:relative;
   display:flex;
   align-items:center;
   gap:10px;
-}
-
-.sg-down-share{
-  cursor:pointer;
-}
-
-.sg-down-share:hover{
-  color:#e60000;
 }
 
 .sg-down-like{
@@ -162,35 +153,36 @@ SweetGift.ru | Article Stats
   border-top:7px solid #555;
 }
 
-.sg-share-menu{
-  display:none;
-  position:absolute;
-  top:38px;
-  left:50%;
-  transform:translateX(-50%);
-  background:#fff;
-  box-shadow:0 10px 30px rgba(0,0,0,.14);
-  border-radius:16px;
-  padding:10px 0;
-  z-index:9999;
-  min-width:230px;
+/* Новый общий Share */
+
+.sg-article-share-placeholder{
+  display:flex;
+  align-items:center;
 }
 
-.sg-share-menu a{
-  display:block;
-  padding:13px 20px;
-  text-decoration:none;
-  font-size:17px;
-  color:#222;
+.sg-article-share-box{
+  margin:0 !important;
 }
 
-.sg-share-menu a:hover{
-  background:#f7f7f7;
-  color:#e60000;
+.sg-article-share-box .sg-share-main{
+  padding:0 !important;
+  border:none !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  color:#777 !important;
+  font-size:20px !important;
+  font-weight:400 !important;
+  height:auto !important;
+  gap:8px !important;
 }
 
-.sg-down-share.open .sg-share-menu{
-  display:block;
+.sg-article-share-box .sg-share-main:hover{
+  color:#e60000 !important;
+}
+
+.sg-article-share-box .sg-share-icon{
+  width:18px;
+  height:18px;
 }
 
 .sg-mobile-tip{
@@ -208,6 +200,7 @@ SweetGift.ru | Article Stats
 }
 
 @media(max-width:640px){
+
   .uc-like-up{
     margin:15px 20px 24px 20px;
   }
@@ -254,11 +247,12 @@ SweetGift.ru | Article Stats
     flex-wrap:wrap;
   }
 
-  .sg-share-menu{
-    left:0;
-    transform:none;
+  .sg-article-share-box .sg-share-main{
+    font-size:17px !important;
   }
+
 }
+`;
 `;
 
     const style = document.createElement('style');
@@ -387,16 +381,7 @@ SweetGift.ru | Article Stats
           👁 <span>${views}</span>
         </div>
 
-        <div class="sg-down-share">
-          ↗ <span>Поделиться</span>
-
-          <div class="sg-share-menu">
-            <a target="_blank" rel="noopener" href="https://vk.com/share.php?url=${url}">ВКонтакте</a>
-            <a target="_blank" rel="noopener" href="https://t.me/share/url?url=${url}&text=${title}">Telegram</a>
-            <a href="max://send?text=${url}">MAX</a>
-            <a href="#" class="sg-copy-link">Скопировать ссылку</a>
-          </div>
-        </div>
+       <div class="sg-article-share-placeholder"></div>
 
         <button
           class="sg-down-like sg-like-btn ${isLiked ? 'is-liked' : ''}"
@@ -514,11 +499,25 @@ SweetGift.ru | Article Stats
           renderUp(box, views, likes, date, isLiked, readTime);
         });
 
-        downBoxes.forEach(function(box){
-          renderDown(box, views, likes, isLiked);
-        });
+      downBoxes.forEach(function(box){
+        renderDown(box, views, likes, isLiked);
 
-        initShareMenus();
+        var placeholder = box.querySelector('.sg-article-share-placeholder');
+
+        if (placeholder && window.SG && window.SG.share) {
+        var shareBox = window.SG.share.create({
+        title: document.title || articleTitle,
+        text: document.title || articleTitle,
+        url: window.location.href,
+        buttonText: 'Поделиться',
+      className: 'sg-share-box sg-article-share-box'
+    });
+
+      placeholder.replaceWith(shareBox);
+    }
+  });
+
+       
 
         document.querySelectorAll('.sg-like-btn').forEach(function(btn){
           btn.addEventListener('click', function(e){

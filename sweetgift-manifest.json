@@ -2,6 +2,13 @@
   "version": "1.0.2",
   "modules": [
     {
+      "name": "share",
+      "enabled": true,
+      "src": "sweetgift-share.js",
+      "version": "1",
+      "pages": ["all"]
+    },
+    {
       "name": "product-badges",
       "enabled": true,
       "src": "sweetgift-product-badges.js",
@@ -19,7 +26,7 @@
       "name": "article-stats",
       "enabled": true,
       "src": "sweetgift-article-stats.js",
-      "version": "1",
+      "version": "2",
       "pages": ["/stati/*"]
     },
     {
