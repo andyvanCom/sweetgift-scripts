@@ -5,7 +5,7 @@
       "name": "product-badges",
       "enabled": true,
       "src": "sweetgift-product-badges.js",
-      "version": "1",
+      "version": "2",
       "pages": ["all"]
     },
     {
