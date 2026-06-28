@@ -1,6 +1,14 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "modules": [
+    {
+      "name": "core",
+      "enabled": false,
+      "src": "sweetgift-core.js",
+      "version": "1",
+      "pages": ["all"]
+    },
+
     {
       "name": "share",
       "enabled": true,
@@ -8,13 +16,7 @@
       "version": "1",
       "pages": ["all"]
     },
-    {
-      "name": "product-badges",
-      "enabled": true,
-      "src": "sweetgift-product-badges.js",
-      "version": "2",
-      "pages": ["all"]
-    },
+
     {
       "name": "live-popup",
       "enabled": true,
@@ -22,28 +24,55 @@
       "version": "1",
       "pages": ["all"]
     },
-    {
-      "name": "article-stats",
-      "enabled": true,
-      "src": "sweetgift-article-stats.js",
-      "version": "3",
-      "pages": ["/stati/*"]
-    },
+
     {
       "name": "product-analytics",
       "enabled": false,
       "src": "sweetgift-product-analytics.js",
       "version": "1",
-      "pages": ["/tproduct/*"]
-},
+      "pages": [
+        "/tproduct/*"
+      ]
+    },
+
     {
-  "name": "product-top-lists",
-  "enabled": true,
-  "src": "sweetgift-product-top-lists.js",
-  "version": "1",
-  "pages": [
-    "/tproduct/*"
-  ]
-}
+      "name": "product-badges",
+      "enabled": true,
+      "src": "sweetgift-product-badges.js",
+      "version": "2",
+      "pages": [
+        "/tproduct/*"
+      ]
+    },
+
+    {
+      "name": "product-top-lists",
+      "enabled": true,
+      "src": "sweetgift-product-top-lists.js",
+      "version": "1",
+      "pages": [
+        "/tproduct/*"
+      ]
+    },
+
+    {
+      "name": "article-stats",
+      "enabled": true,
+      "src": "sweetgift-article-stats.js",
+      "version": "3",
+      "pages": [
+        "/stati/*"
+      ]
+    },
+
+    {
+      "name": "order-analytics",
+      "enabled": false,
+      "src": "sweetgift-order-analytics.js",
+      "version": "1",
+      "pages": [
+        "/order/*"
+      ]
+    }
   ]
 }
