@@ -34,7 +34,7 @@
       "enabled": true,
       "src": "sweetgift-product-top-lists.js",
       "version": "2",
-      "pages": ["products"]
+      "pages": ["all"]
     }
   ]
 }
