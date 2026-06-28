@@ -1,18 +1,11 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.3",
   "modules": [
     {
       "name": "share",
       "enabled": true,
       "src": "sweetgift-share.js",
       "version": "1",
-      "pages": ["all"]
-    },
-    {
-      "name": "product-top-lists",
-      "enabled": true,
-      "src": "sweetgift-product-top-lists.js",
-      "version": "2",
       "pages": ["all"]
     },
     {
@@ -35,6 +28,19 @@
       "src": "sweetgift-article-stats.js",
       "version": "3",
       "pages": ["/stati/*"]
+    },
+    {
+      "name": "product-top-lists",
+      "enabled": true,
+      "src": "sweetgift-product-top-lists.js",
+      "version": "1",
+      "pages": [
+        "/podarochnye-korziny-s-produktami/tproduct/*",
+        "/fruktovye-korziny/tproduct/*",
+        "/klubnika-v-shokolade/tproduct/*",
+        "/fruktovye-bukety/tproduct/*",
+        "/novogodnie-nabory/tproduct/*"
+      ]
     }
   ]
 }
