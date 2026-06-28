@@ -253,7 +253,7 @@ SweetGift.ru | Article Stats
 
 }
 `;
-`;
+
 
     const style = document.createElement('style');
     style.id = 'sg-article-stats-css';
