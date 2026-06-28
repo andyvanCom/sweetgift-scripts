@@ -1,5 +1,5 @@
 {
-  "version": "1.0.4",
+  "version": "1.1.0",
   "modules": [
     {
       "name": "core",
@@ -30,9 +30,7 @@
       "enabled": false,
       "src": "sweetgift-product-analytics.js",
       "version": "1",
-      "pages": [
-        "/tproduct/*"
-      ]
+      "pages": ["products"]
     },
 
     {
@@ -40,19 +38,15 @@
       "enabled": true,
       "src": "sweetgift-product-badges.js",
       "version": "2",
-      "pages": [
-        "/tproduct/*"
-      ]
+      "pages": ["products"]
     },
 
     {
       "name": "product-top-lists",
       "enabled": true,
       "src": "sweetgift-product-top-lists.js",
-      "version": "1",
-      "pages": [
-        "/tproduct/*"
-      ]
+      "version": "2",
+      "pages": ["products"]
     },
 
     {
@@ -60,9 +54,7 @@
       "enabled": true,
       "src": "sweetgift-article-stats.js",
       "version": "3",
-      "pages": [
-        "/stati/*"
-      ]
+      "pages": ["articles"]
     },
 
     {
@@ -70,9 +62,7 @@
       "enabled": false,
       "src": "sweetgift-order-analytics.js",
       "version": "1",
-      "pages": [
-        "/order/*"
-      ]
+      "pages": ["order"]
     }
   ]
 }

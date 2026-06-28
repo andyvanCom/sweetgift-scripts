@@ -16,7 +16,7 @@ SweetGift.ru | Main Scripts Loader
 
   window.SG = window.SG || {};
   window.SG.loader = window.SG.loader || {};
-  window.SG.loader.version = '1.0.0';
+  window.SG.loader.version = '1.1.0';
   window.SG.loader.loaded = window.SG.loader.loaded || {};
 
   function log() {
@@ -29,23 +29,64 @@ SweetGift.ru | Main Scripts Loader
     return window.location.pathname || '/';
   }
 
+  function isProductPage(path) {
+    return path.indexOf('/tproduct/') !== -1;
+  }
+
+  function isArticlePage(path) {
+    return path.indexOf('/stati/') === 0;
+  }
+
+  function isTopPage(path) {
+    return path === '/top' || path.indexOf('/top/') === 0;
+  }
+
+  function escapeRegExp(str) {
+    return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function wildcardToRegExp(rule) {
+    var pattern = '^' + String(rule)
+      .split('*')
+      .map(escapeRegExp)
+      .join('.*') + '$';
+
+    return new RegExp(pattern);
+  }
+
+  function matchPageRule(rule, path) {
+    if (!rule) return false;
+
+    if (rule === 'all') return true;
+    if (rule === 'products') return isProductPage(path);
+    if (rule === 'articles') return isArticlePage(path);
+    if (rule === 'top') return isTopPage(path);
+
+    if (rule.indexOf('contains:') === 0) {
+      return path.indexOf(rule.replace('contains:', '')) !== -1;
+    }
+
+    if (rule === path) return true;
+
+    if (rule.indexOf('*') !== -1) {
+      return wildcardToRegExp(rule).test(path);
+    }
+
+    return false;
+  }
+
   function shouldLoadModule(module) {
     if (!module || module.enabled !== true) return false;
 
-    if (!module.pages || !module.pages.length || module.pages.indexOf('all') !== -1) {
+    if (!module.pages || !module.pages.length) {
       return true;
     }
 
     var path = currentPath();
 
     for (var i = 0; i < module.pages.length; i++) {
-      var rule = module.pages[i];
-
-      if (rule === path) return true;
-
-      if (rule.indexOf('*') !== -1) {
-        var prefix = rule.replace('*', '');
-        if (path.indexOf(prefix) === 0) return true;
+      if (matchPageRule(module.pages[i], path)) {
+        return true;
       }
     }
 
@@ -105,6 +146,7 @@ SweetGift.ru | Main Scripts Loader
         return response.json();
       })
       .then(function (manifest) {
+        window.SG.loader.manifest = manifest;
         log('Manifest loaded', manifest);
         loadModules(manifest);
       })
