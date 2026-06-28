@@ -29,6 +29,12 @@
       "version": "3",
       "pages": ["/stati/*"]
     },
-
+    {
+      "name": "product-top-lists",
+      "enabled": false,
+      "src": "sweetgift-product-top-lists.js",
+      "version": "1",
+      "pages": ["all"]
+    }
   ]
 }
