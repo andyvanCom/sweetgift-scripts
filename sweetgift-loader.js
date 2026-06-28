@@ -29,28 +29,61 @@ SweetGift.ru | Main Scripts Loader
     return window.location.pathname || '/';
   }
 
-  function shouldLoadModule(module) {
-    if (!module || module.enabled !== true) return false;
+ function shouldLoadModule(module) {
+  if (!module || module.enabled !== true) return false;
 
-    if (!module.pages || !module.pages.length || module.pages.indexOf('all') !== -1) {
-      return true;
+  if (!module.pages || !module.pages.length || module.pages.indexOf('all') !== -1) {
+    return true;
+  }
+
+  var path = currentPath();
+
+  function isProductPage() {
+    return path.indexOf('/tproduct/') !== -1;
+  }
+
+  function isArticlePage() {
+    return path.indexOf('/stati/') === 0;
+  }
+
+  function isTopPage() {
+    return path === '/top' || path.indexOf('/top/') === 0;
+  }
+
+  for (var i = 0; i < module.pages.length; i++) {
+    var rule = module.pages[i];
+
+    if (rule === path) return true;
+    if (rule === 'products' && isProductPage()) return true;
+    if (rule === 'articles' && isArticlePage()) return true;
+    if (rule === 'top' && isTopPage()) return true;
+
+    if (rule.indexOf('contains:') === 0) {
+      if (path.indexOf(rule.replace('contains:', '')) !== -1) return true;
     }
 
-    var path = currentPath();
+    if (rule.indexOf('*') !== -1) {
+      var parts = rule.split('*');
 
-    for (var i = 0; i < module.pages.length; i++) {
-      var rule = module.pages[i];
+      if (parts.length === 2) {
+        var before = parts[0];
+        var after = parts[1];
 
-      if (rule === path) return true;
-
-      if (rule.indexOf('*') !== -1) {
+        if (
+          (before === '' || path.indexOf(before) === 0) &&
+          (after === '' || path.indexOf(after) !== -1)
+        ) {
+          return true;
+        }
+      } else {
         var prefix = rule.replace('*', '');
         if (path.indexOf(prefix) === 0) return true;
       }
     }
-
-    return false;
   }
+
+  return false;
+}
 
   function loadScript(module) {
     if (!module.src || !module.name) return;
