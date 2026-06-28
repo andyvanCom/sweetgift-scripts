@@ -1,11 +1,18 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.5",
   "modules": [
     {
       "name": "share",
       "enabled": true,
       "src": "sweetgift-share.js",
       "version": "1",
+      "pages": ["all"]
+    },
+    {
+      "name": "product-top-lists",
+      "enabled": true,
+      "src": "sweetgift-product-top-lists.js",
+      "version": "2",
       "pages": ["all"]
     },
     {
@@ -28,13 +35,6 @@
       "src": "sweetgift-article-stats.js",
       "version": "3",
       "pages": ["/stati/*"]
-    },
-    {
-      "name": "product-top-lists",
-      "enabled": true,
-      "src": "sweetgift-product-top-lists.js",
-      "version": "2",
-      "pages": ["all"]
     }
   ]
 }
