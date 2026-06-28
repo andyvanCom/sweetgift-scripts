@@ -29,18 +29,6 @@
       "version": "3",
       "pages": ["/stati/*"]
     },
-    {
-      "name": "product-top-lists",
-      "enabled": true,
-      "src": "sweetgift-product-top-lists.js",
-      "version": "1",
-      "pages": [
-        "/podarochnye-korziny-s-produktami/tproduct/*",
-        "/fruktovye-korziny/tproduct/*",
-        "/klubnika-v-shokolade/tproduct/*",
-        "/fruktovye-bukety/tproduct/*",
-        "/novogodnie-nabory/tproduct/*"
-      ]
-    }
+
   ]
 }
