@@ -1,10 +1,6 @@
 /*
 ===========================================================================
 SweetGift.ru | Main Scripts Loader
----------------------------------------------------------------------------
-Единый загрузчик модулей SweetGift.
-В Tilda HEAD подключается только этот файл.
-Список модулей берется из sweetgift-manifest.json.
 ===========================================================================
 */
 
@@ -16,8 +12,9 @@ SweetGift.ru | Main Scripts Loader
 
   window.SG = window.SG || {};
   window.SG.loader = window.SG.loader || {};
-  window.SG.loader.version = '1.1.0';
+  window.SG.loader.version = '1.2.0';
   window.SG.loader.loaded = window.SG.loader.loaded || {};
+  window.SG.loader.manifest = null;
 
   function log() {
     if (window.SG && window.SG.debug) {
@@ -41,17 +38,23 @@ SweetGift.ru | Main Scripts Loader
     return path === '/top' || path.indexOf('/top/') === 0;
   }
 
+  function isOrderPage(path) {
+    return path.indexOf('/order') === 0 || path.indexOf('/success') !== -1 || path.indexOf('/spasibo') !== -1;
+  }
+
   function escapeRegExp(str) {
     return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   function wildcardToRegExp(rule) {
-    var pattern = '^' + String(rule)
-      .split('*')
-      .map(escapeRegExp)
-      .join('.*') + '$';
-
-    return new RegExp(pattern);
+    return new RegExp(
+      '^' +
+      String(rule)
+        .split('*')
+        .map(escapeRegExp)
+        .join('.*') +
+      '$'
+    );
   }
 
   function matchPageRule(rule, path) {
@@ -61,6 +64,7 @@ SweetGift.ru | Main Scripts Loader
     if (rule === 'products') return isProductPage(path);
     if (rule === 'articles') return isArticlePage(path);
     if (rule === 'top') return isTopPage(path);
+    if (rule === 'order') return isOrderPage(path);
 
     if (rule.indexOf('contains:') === 0) {
       return path.indexOf(rule.replace('contains:', '')) !== -1;
@@ -93,7 +97,21 @@ SweetGift.ru | Main Scripts Loader
     return false;
   }
 
-  function loadScript(module) {
+  function getScriptVersion(module, manifest) {
+    var parts = [];
+
+    if (manifest && manifest.version) {
+      parts.push('m' + manifest.version);
+    }
+
+    if (module.version) {
+      parts.push('mod' + module.version);
+    }
+
+    return parts.length ? parts.join('-') : Date.now();
+  }
+
+  function loadScript(module, manifest) {
     if (!module.src || !module.name) return;
 
     if (window.SG.loader.loaded[module.name]) {
@@ -107,9 +125,7 @@ SweetGift.ru | Main Scripts Loader
       src = REPO_BASE + src;
     }
 
-    if (module.version) {
-      src += (src.indexOf('?') === -1 ? '?' : '&') + 'v=' + encodeURIComponent(module.version);
-    }
+    src += (src.indexOf('?') === -1 ? '?' : '&') + 'v=' + encodeURIComponent(getScriptVersion(module, manifest));
 
     var script = document.createElement('script');
     script.src = src;
@@ -117,7 +133,7 @@ SweetGift.ru | Main Scripts Loader
 
     script.onload = function () {
       window.SG.loader.loaded[module.name] = true;
-      log('Loaded:', module.name);
+      log('Loaded:', module.name, src);
     };
 
     script.onerror = function () {
@@ -135,7 +151,7 @@ SweetGift.ru | Main Scripts Loader
 
     manifest.modules.forEach(function (module) {
       if (shouldLoadModule(module)) {
-        loadScript(module);
+        loadScript(module, manifest);
       }
     });
   }
