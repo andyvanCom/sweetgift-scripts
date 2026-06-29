@@ -5,7 +5,7 @@
       "name": "core",
       "enabled": true,
       "src": "sweetgift-core.js",
-      "version": "1",
+      "version": "2",
       "pages": ["all"]
     },
     {
