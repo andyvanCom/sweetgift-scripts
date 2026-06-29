@@ -1,6 +1,13 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "modules": [
+    {
+      "name": "core",
+      "enabled": true,
+      "src": "sweetgift-core.js",
+      "version": "1",
+      "pages": ["all"]
+    },
     {
       "name": "share",
       "enabled": true,
