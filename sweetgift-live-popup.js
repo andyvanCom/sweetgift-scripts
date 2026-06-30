@@ -1,9 +1,9 @@
 /*
 ===========================================================================
-SweetGift.ru | Live Activity Popup v4
+SweetGift.ru | Live Activity Popup v5
 ---------------------------------------------------------------------------
 Асинхронный попап живой активности.
-Безопасно грузится после сайта, не блокирует Tilda и не должен ломать страницу.
+Использует SweetGift Core, если он загружен.
 ===========================================================================
 */
 
@@ -18,8 +18,8 @@ SweetGift.ru | Live Activity Popup v4
     supabaseKey: 'sb_publishable_JrPJQVLLpcDxjte5OSCnvg_ocvpBqqT',
     popupDelay: 12000,
     visibleTime: 25000,
-    sessionKey: 'sg_live_popup_shown_v4',
-    cssId: 'sg-live-popup-css-v4'
+    sessionKey: 'sg_live_popup_shown_v5',
+    cssId: 'sg-live-popup-css-v5'
   };
 
   function log() {
@@ -36,9 +36,9 @@ SweetGift.ru | Live Activity Popup v4
     }
   }
 
-  function loadSupabase(callback) {
+  function loadSupabaseFallback(callback) {
     if (window.supabase) {
-      callback();
+      callback(window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey));
       return;
     }
 
@@ -48,7 +48,7 @@ SweetGift.ru | Live Activity Popup v4
       var timer = setInterval(function () {
         if (window.supabase) {
           clearInterval(timer);
-          callback();
+          callback(window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey));
         }
       }, 100);
 
@@ -64,15 +64,19 @@ SweetGift.ru | Live Activity Popup v4
     script.async = true;
 
     script.onload = function () {
-      log('Supabase loaded');
-      callback();
-    };
-
-    script.onerror = function () {
-      log('Supabase load failed');
+      callback(window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey));
     };
 
     document.body.appendChild(script);
+  }
+
+  function getSupabaseClient(callback) {
+    if (window.SG && window.SG.core && typeof window.SG.core.supabase === 'function') {
+      window.SG.core.supabase(callback);
+      return;
+    }
+
+    loadSupabaseFallback(callback);
   }
 
   function injectCss() {
@@ -149,7 +153,6 @@ SweetGift.ru | Live Activity Popup v4
     left:12px;
     right:12px;
     bottom:120px;
-    border:4px solid red;
     width:auto;
     max-width:none;
     grid-template-columns:58px 1fr 22px;
@@ -175,6 +178,10 @@ SweetGift.ru | Live Activity Popup v4
   }
 
   function escapeHtml(text) {
+    if (window.SG && window.SG.core && typeof window.SG.core.escapeHtml === 'function') {
+      return window.SG.core.escapeHtml(text);
+    }
+
     return String(text || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -216,7 +223,6 @@ SweetGift.ru | Live Activity Popup v4
   }
 
   function showPopup(item) {
-    console.log('[SG Popup] showPopup()', item);
     if (!item || !item.title || !item.product_key) return;
     if (document.querySelector('.sg-live-popup')) return;
 
@@ -239,7 +245,6 @@ SweetGift.ru | Live Activity Popup v4
       '<button class="sg-live-close" type="button" aria-label="Закрыть">×</button>';
 
     document.body.appendChild(popup);
-    console.log('[SG Popup] popup added to DOM');
 
     var closeBtn = popup.querySelector('.sg-live-close');
 
@@ -251,7 +256,6 @@ SweetGift.ru | Live Activity Popup v4
 
     setTimeout(function () {
       popup.classList.add('is-visible');
-      console.log('[SG Popup] popup visible');
     }, 100);
 
     setTimeout(function () {
@@ -274,10 +278,8 @@ SweetGift.ru | Live Activity Popup v4
   }
 
   function loadActivity() {
-    loadSupabase(function () {
-      if (!window.supabase) return;
-
-      var sb = window.supabase.createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey);
+    getSupabaseClient(function (sb) {
+      if (!sb || typeof sb.rpc !== 'function') return;
 
       sb.rpc('get_recent_product_activity')
         .then(function (res) {
@@ -297,23 +299,21 @@ SweetGift.ru | Live Activity Popup v4
 
   function init() {
     safe(function () {
+      log('Init');
 
-        log('Init');
+      var isTestMode = window.location.search.indexOf('testpopup=1') !== -1;
 
-        var isTestMode =
-            window.location.search.indexOf('testpopup=1') !== -1;
+      if (!isTestMode && sessionStorage.getItem(CONFIG.sessionKey)) {
+        log('Already shown in this session');
+        return;
+      }
 
-        if (!isTestMode && sessionStorage.getItem(CONFIG.sessionKey)) {
-            log('Already shown in this session');
-            return;
-        }
-
-        setTimeout(function () {
-            loadActivity();
-        }, isTestMode ? 1000 : CONFIG.popupDelay);
-
+      setTimeout(function () {
+        loadActivity();
+      }, isTestMode ? 1000 : CONFIG.popupDelay);
     });
-}
+  }
+
   window.SG.livePopup = {
     init: init,
     showTest: function () {
