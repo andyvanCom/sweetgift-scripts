@@ -170,9 +170,19 @@ SweetGift.ru | Core
         return;
       }
 
-      if (!core._supabaseClient) {
-        core._supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+   if (!core._supabaseClient) {
+  core._supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
       }
+    }
+  );
+}
 
       core._supabaseLoading = false;
 
