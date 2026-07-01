@@ -16,6 +16,13 @@
       "pages": ["all"]
     },
     {
+      "name": "product-analytics",
+      "enabled": true,
+      "src": "sweetgift-product-analytics.js",
+      "version": "1",
+      "pages": ["all"]
+    },
+    {
       "name": "product-badges",
       "enabled": true,
       "src": "sweetgift-product-badges.js",
