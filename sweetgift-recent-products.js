@@ -2,8 +2,11 @@
 ===========================================================================
 SweetGift.ru | Recent Products
 ---------------------------------------------------------------------------
-Блок "Вы недавно смотрели" на карточках товара.
+Блок "Вы недавно смотрели" / "Продолжить просмотр" на карточках товара.
 Хранит историю в localStorage, без запросов к Supabase.
+
+Для вывода блока вставить в T123 в нужном месте:
+<div class="sg-recent-products"></div>
 ===========================================================================
 */
 
@@ -14,20 +17,25 @@ SweetGift.ru | Recent Products
 
   var STORAGE_KEY = 'sg_recent_products_v1';
   var CSS_ID = 'sg-recent-products-css';
+  var VERSION = '6';
+
   var MAX_STORE = 20;
   var MAX_SHOW = 4;
 
+  window.SG.recentProducts = window.SG.recentProducts || {};
+  window.SG.recentProducts.version = VERSION;
+
   function isProductPage() {
-    if (window.SG.core && typeof SG.core.isProductPage === 'function') {
-      return SG.core.isProductPage();
+    if (window.SG.core && typeof window.SG.core.isProductPage === 'function') {
+      return window.SG.core.isProductPage();
     }
 
     return window.location.pathname.indexOf('/tproduct/') !== -1;
   }
 
   function escapeHtml(text) {
-    if (window.SG.core && typeof SG.core.escapeHtml === 'function') {
-      return SG.core.escapeHtml(text);
+    if (window.SG.core && typeof window.SG.core.escapeHtml === 'function') {
+      return window.SG.core.escapeHtml(text);
     }
 
     return String(text || '')
@@ -42,7 +50,10 @@ SweetGift.ru | Recent Products
     try {
       return new URL(url, window.location.origin).pathname.replace(/\/$/, '');
     } catch (e) {
-      return String(url || '').split('?')[0].replace(/\/$/, '');
+      return String(url || '')
+        .replace(window.location.origin, '')
+        .split('?')[0]
+        .replace(/\/$/, '');
     }
   }
 
@@ -85,12 +96,16 @@ SweetGift.ru | Recent Products
         document.querySelector('.t-slds__bgimg img') ||
         document.querySelector('.t-store__prod-popup__slider img');
 
-      if (img) image = img.getAttribute('data-original') || img.src || '';
+      if (img) {
+        image = img.getAttribute('data-original') || img.src || '';
+      }
     }
 
     if (!image) {
       var bg = document.querySelector('.t-slds__bgimg, .t-bgimg');
-      if (bg) image = bg.getAttribute('data-original') || '';
+      if (bg) {
+        image = bg.getAttribute('data-original') || '';
+      }
     }
 
     return {
@@ -130,16 +145,17 @@ SweetGift.ru | Recent Products
 }
 
 .sg-recent-products-title{
-  font-size:15px;
+  font-size:22px;
+  line-height:1.25;
   font-weight:700;
-  margin:0 0 10px;
+  margin:0 0 14px;
   color:#222;
 }
 
 .sg-recent-products-list{
   display:grid;
   grid-template-columns:repeat(4,minmax(0,1fr));
-  gap:8px;
+  gap:14px;
 }
 
 .sg-recent-product{
@@ -151,10 +167,11 @@ SweetGift.ru | Recent Products
 .sg-recent-product-img{
   width:100%;
   aspect-ratio:1/1;
-  border-radius:10px;
+  border-radius:14px;
   overflow:hidden;
   background:#f4f4f4;
   border:1px solid #eee;
+  transition:.2s;
 }
 
 .sg-recent-product-img img{
@@ -165,9 +182,9 @@ SweetGift.ru | Recent Products
 }
 
 .sg-recent-product-name{
-  margin-top:5px;
-  font-size:11px;
-  line-height:1.25;
+  margin-top:8px;
+  font-size:14px;
+  line-height:1.3;
   color:#555;
   display:-webkit-box;
   -webkit-line-clamp:2;
@@ -177,21 +194,36 @@ SweetGift.ru | Recent Products
 
 .sg-recent-product:hover .sg-recent-product-img{
   border-color:#e60000;
+  box-shadow:0 8px 22px rgba(0,0,0,.06);
+}
+
+.sg-recent-product:hover .sg-recent-product-name{
+  color:#e60000;
 }
 
 @media(max-width:640px){
   .sg-recent-products{
     max-width:none;
-    margin:18px 0 24px;
+    margin:28px 0 26px;
+    padding:0;
+  }
+
+  .sg-recent-products-title{
+    font-size:20px;
+    margin-bottom:12px;
   }
 
   .sg-recent-products-list{
-    grid-template-columns:repeat(4,minmax(0,1fr));
-    gap:7px;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:12px;
+  }
+
+  .sg-recent-product-img{
+    border-radius:12px;
   }
 
   .sg-recent-product-name{
-    font-size:10px;
+    font-size:13px;
   }
 }
 `;
@@ -212,6 +244,27 @@ SweetGift.ru | Recent Products
       .slice(0, MAX_SHOW);
   }
 
+  function renderJsonLd(items) {
+    if (!items.length) return '';
+
+    var data = {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      itemListElement: items.map(function (item, index) {
+        return {
+          '@type': 'ListItem',
+          position: index + 1,
+          url: window.location.origin + (item.url || item.key),
+          name: item.title || ''
+        };
+      })
+    };
+
+    return '<script type="application/ld+json">' +
+      JSON.stringify(data).replace(/</g, '\\u003c') +
+      '<\/script>';
+  }
+
   function renderInto(box) {
     var items = getRecentForRender();
 
@@ -223,74 +276,43 @@ SweetGift.ru | Recent Products
 
     box.style.display = '';
 
-    var html = '<div class="sg-recent-products-title">Вы недавно смотрели</div>';
+    var html = '<h3 class="sg-recent-products-title">Продолжить просмотр</h3>';
     html += '<div class="sg-recent-products-list">';
 
     items.forEach(function (item) {
+      var title = escapeHtml(item.title || '');
+      var url = escapeHtml(item.url || item.key || '');
+      var image = escapeHtml(item.image || '');
+
       html +=
-        '<a class="sg-recent-product" href="' + escapeHtml(item.url || item.key) + '">' +
+        '<a class="sg-recent-product" href="' + url + '" title="' + title + '">' +
           '<div class="sg-recent-product-img">' +
-            (item.image ? '<img src="' + escapeHtml(item.image) + '" alt="">' : '') +
+            (image
+              ? '<img loading="lazy" decoding="async" src="' + image + '" alt="' + title + '" title="' + title + '">'
+              : '') +
           '</div>' +
-          '<div class="sg-recent-product-name">' + escapeHtml(item.title) + '</div>' +
+          '<div class="sg-recent-product-name">' + title + '</div>' +
         '</a>';
     });
 
     html += '</div>';
+    html += renderJsonLd(items);
 
     box.innerHTML = html;
   }
 
-function findPlace() {
-  var headers = Array.from(document.querySelectorAll('h2, h3, .t-title, .t-name, .t-descr'));
-
-  var recommendTitle = headers.find(function (el) {
-    return /рекомендуем/i.test(String(el.textContent || ''));
-  });
-
-  if (recommendTitle) {
-    return {
-      el: recommendTitle.closest('.t-rec') || recommendTitle,
-      mode: 'before'
-    };
-  }
-
-  var productBlock =
-    document.querySelector('.t-store__product-snippet') ||
-    document.querySelector('.js-store-prod-all') ||
-    document.querySelector('.t-store');
-
-  if (productBlock) {
-    return {
-      el: productBlock,
-      mode: 'after'
-    };
-  }
-
-  return null;
-}
   function render() {
     if (!isProductPage()) return;
 
     injectCss();
 
-    var existing = document.querySelector('.sg-recent-products');
+    var boxes = Array.from(document.querySelectorAll('.sg-recent-products'));
 
-    if (!existing) {
-   var place = findPlace();
-if (!place || !place.el) return;
+    if (!boxes.length) return;
 
-existing = document.createElement('div');
-existing.className = 'sg-recent-products';
-
-if (place.mode === 'before') {
-  place.el.insertAdjacentElement('beforebegin', existing);
-} else {
-  place.el.insertAdjacentElement('afterend', existing);
-}
-    }
-
-    renderInto(existing);
+    boxes.forEach(function (box) {
+      renderInto(box);
+    });
   }
 
   function init() {
