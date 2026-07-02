@@ -47,7 +47,7 @@
       "name": "recent-products",
       "enabled": true,
       "src": "sweetgift-recent-products.js",
-      "version": "1",
+      "version": "2",
       "pages": ["all"]
     },
     {

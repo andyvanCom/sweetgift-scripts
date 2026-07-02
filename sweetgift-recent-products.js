@@ -239,15 +239,13 @@ SweetGift.ru | Recent Products
     box.innerHTML = html;
   }
 
-  function findPlace() {
-    return (
-      document.querySelector('.t-store__product-snippet .t-store__prod-popup__slider') ||
-      document.querySelector('.t-store__product-snippet .t-slds') ||
-      document.querySelector('.t-store__product-snippet .t-store__prod-popup__gallery') ||
-      document.querySelector('.t-store__product-snippet')
-    );
-  }
-
+function findPlace() {
+  return (
+    document.querySelector('.t-store__product-snippet') ||
+    document.querySelector('.js-store-prod-all') ||
+    document.querySelector('.t-store')
+  );
+}
   function render() {
     if (!isProductPage()) return;
 
@@ -262,7 +260,7 @@ SweetGift.ru | Recent Products
       existing = document.createElement('div');
       existing.className = 'sg-recent-products';
 
-      place.insertAdjacentElement('afterend', existing);
+      place.appendChild(existing);
     }
 
     renderInto(existing);
