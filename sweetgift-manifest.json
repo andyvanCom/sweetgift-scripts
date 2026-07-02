@@ -44,6 +44,27 @@
       "pages": ["/stati/*"]
     },
     {
+      "name": "recent-products",
+      "enabled": true,
+      "src": "sweetgift-recent-products.js",
+      "version": "1",
+      "pages": ["all"]
+    },
+    {
+      "name": "top-pages",
+      "enabled": true,
+      "src": "sweetgift-top-pages.js",
+      "version": "1",
+      "pages": ["/top/*"]
+    },
+    {
+      "name": "top-widgets",
+      "enabled": false,
+      "src": "sweetgift-top-widgets.js",
+      "version": "1",
+      "pages": ["all"]
+    },
+    {
       "name": "product-top-lists",
       "enabled": false,
       "src": "sweetgift-product-top-lists.js",
