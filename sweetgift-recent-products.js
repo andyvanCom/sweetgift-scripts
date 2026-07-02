@@ -122,9 +122,11 @@ SweetGift.ru | Recent Products
 
     var css = `
 .sg-recent-products{
-  margin:18px 0 24px;
-  max-width:420px;
+  max-width:1180px;
+  margin:36px auto 34px;
+  padding:0 18px;
   font-family:Arial,sans-serif;
+  clear:both;
 }
 
 .sg-recent-products-title{
@@ -240,11 +242,32 @@ SweetGift.ru | Recent Products
   }
 
 function findPlace() {
-  return (
+  var headers = Array.from(document.querySelectorAll('h2, h3, .t-title, .t-name, .t-descr'));
+
+  var recommendTitle = headers.find(function (el) {
+    return /рекомендуем/i.test(String(el.textContent || ''));
+  });
+
+  if (recommendTitle) {
+    return {
+      el: recommendTitle.closest('.t-rec') || recommendTitle,
+      mode: 'before'
+    };
+  }
+
+  var productBlock =
     document.querySelector('.t-store__product-snippet') ||
     document.querySelector('.js-store-prod-all') ||
-    document.querySelector('.t-store')
-  );
+    document.querySelector('.t-store');
+
+  if (productBlock) {
+    return {
+      el: productBlock,
+      mode: 'after'
+    };
+  }
+
+  return null;
 }
   function render() {
     if (!isProductPage()) return;
@@ -254,13 +277,17 @@ function findPlace() {
     var existing = document.querySelector('.sg-recent-products');
 
     if (!existing) {
-      var place = findPlace();
-      if (!place) return;
+   var place = findPlace();
+if (!place || !place.el) return;
 
-      existing = document.createElement('div');
-      existing.className = 'sg-recent-products';
+existing = document.createElement('div');
+existing.className = 'sg-recent-products';
 
-      place.appendChild(existing);
+if (place.mode === 'before') {
+  place.el.insertAdjacentElement('beforebegin', existing);
+} else {
+  place.el.insertAdjacentElement('afterend', existing);
+}
     }
 
     renderInto(existing);
