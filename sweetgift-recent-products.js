@@ -17,7 +17,7 @@ SweetGift.ru | Recent Products
 
   var STORAGE_KEY = 'sg_recent_products_v1';
   var CSS_ID = 'sg-recent-products-css';
-  var VERSION = '6';
+  var VERSION = '7';
 
   var MAX_STORE = 20;
   var MAX_SHOW = 4;
@@ -132,10 +132,10 @@ SweetGift.ru | Recent Products
     saveList(list);
   }
 
-  function injectCss() {
-    if (document.getElementById(CSS_ID)) return;
+ function injectCss() {
+  if (document.getElementById(CSS_ID)) return;
 
-    var css = `
+  var css = `
 .sg-recent-products{
   max-width:1180px;
   margin:36px auto 34px;
@@ -201,39 +201,95 @@ SweetGift.ru | Recent Products
   color:#e60000;
 }
 
+.sg-recent-products-hint{
+  display:none;
+}
+
 @media(max-width:640px){
   .sg-recent-products{
     max-width:none;
-    margin:28px 0 26px;
+    margin:24px 0 24px;
     padding:0;
+    overflow:hidden;
   }
 
   .sg-recent-products-title{
     font-size:20px;
-    margin-bottom:12px;
+    margin-bottom:6px;
+  }
+
+  .sg-recent-products-hint{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    margin:0 0 10px;
+    font-size:12px;
+    line-height:1.2;
+    color:#999;
+    animation:sgRecentHintFade 5s forwards;
+  }
+
+  .sg-recent-products-hint svg{
+    width:18px;
+    height:24px;
+    flex:0 0 auto;
+    animation:sgRecentHandMove 1.5s ease-in-out infinite;
   }
 
   .sg-recent-products-list{
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    gap:12px;
+    display:flex;
+    gap:10px;
+    overflow-x:auto;
+    overflow-y:hidden;
+    scroll-snap-type:x proximity;
+    -webkit-overflow-scrolling:touch;
+    padding:0 2px 6px;
+  }
+
+  .sg-recent-products-list::-webkit-scrollbar{
+    display:none;
+  }
+
+  .sg-recent-product{
+    flex:0 0 82px;
+    width:82px;
+    scroll-snap-align:start;
   }
 
   .sg-recent-product-img{
-    border-radius:12px;
+    width:78px;
+    height:78px;
+    aspect-ratio:auto;
+    border-radius:11px;
+    margin:0 auto;
   }
 
   .sg-recent-product-name{
-    font-size:13px;
+    margin-top:5px;
+    font-size:10px;
+    line-height:1.25;
+    text-align:center;
+  }
+
+  @keyframes sgRecentHandMove{
+    0%{transform:translateX(0);}
+    50%{transform:translateX(12px);}
+    100%{transform:translateX(0);}
+  }
+
+  @keyframes sgRecentHintFade{
+    0%{opacity:1;}
+    80%{opacity:1;}
+    100%{opacity:0;}
   }
 }
 `;
 
-    var style = document.createElement('style');
-    style.id = CSS_ID;
-    style.textContent = css;
-    document.head.appendChild(style);
-  }
-
+  var style = document.createElement('style');
+  style.id = CSS_ID;
+  style.textContent = css;
+  document.head.appendChild(style);
+}
   function getRecentForRender() {
     var currentKey = normalizePath(window.location.pathname);
 
@@ -277,6 +333,12 @@ SweetGift.ru | Recent Products
     box.style.display = '';
 
     var html = '<h3 class="sg-recent-products-title">Продолжить просмотр</h3>';
+    html += '<div class="sg-recent-products-hint">' +
+  '<svg viewBox="0 0 237 286" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+    '<path d="M78.9579 285.7C78.9579 285.7 37.8579 212.5 20.5579 180.8C-2.44209 138.6 -6.2422 120.8 9.6579 112C19.5579 106.5 33.2579 108.8 41.6579 123.4L61.2579 154.6V32.3C61.2579 32.3 60.0579 0 83.0579 0C107.558 0 105.458 32.3 105.458 32.3V91.7C105.458 91.7 118.358 82.4 133.458 86.6C141.158 88.7 150.158 92.4 154.958 104.6C154.958 104.6 185.658 89.7 200.958 121.4C200.958 121.4 236.358 114.4 236.358 151.1C236.358 187.8 192.158 285.7 192.158 285.7H78.9579Z" fill="rgba(190,190,190,1)"></path>' +
+  '</svg>' +
+  '<span>Листайте товары</span>' +
+'</div>';
     html += '<div class="sg-recent-products-list">';
 
     items.forEach(function (item) {
