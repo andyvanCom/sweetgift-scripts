@@ -214,21 +214,21 @@ SweetGift.ru | Recent Products
 .sg-recent-product:hover .sg-recent-product-name{
   color:#e60000;
 }
-
 @media(max-width:640px){
   .sg-recent-products{
     max-width:none;
-    margin:24px 0 24px;
+    margin:24px 0 28px;
     padding:0;
     overflow:hidden;
   }
 
   .sg-recent-products-head{
-    margin-bottom:10px;
+    margin-bottom:12px;
+    padding:0 14px;
   }
 
   .sg-recent-products-title{
-    font-size:20px;
+    font-size:22px;
   }
 
   .sg-recent-products-hint{
@@ -251,12 +251,12 @@ SweetGift.ru | Recent Products
 
   .sg-recent-products-list{
     display:flex;
-    gap:12px;
+    gap:10px;
     overflow-x:auto;
     overflow-y:hidden;
+    padding:0 14px 10px;
     scroll-snap-type:x proximity;
     -webkit-overflow-scrolling:touch;
-    padding:0 2px 6px;
   }
 
   .sg-recent-products-list::-webkit-scrollbar{
@@ -264,24 +264,32 @@ SweetGift.ru | Recent Products
   }
 
   .sg-recent-product{
-    flex:0 0 98px;
-    width:98px;
+    flex:0 0 calc((100vw - 58px) / 3.25);
     scroll-snap-align:start;
+    border:1px solid #eee;
+    border-radius:14px;
+    background:#fff;
+    overflow:hidden;
+    box-shadow:0 4px 14px rgba(0,0,0,.04);
   }
 
   .sg-recent-product-img{
-    width:94px;
-    height:94px;
-    aspect-ratio:auto;
-    border-radius:12px;
-    margin:0 auto;
+    width:100%;
+    aspect-ratio:1/1;
+    border-radius:0;
+    border:0;
+    background:#f5f5f5;
   }
 
   .sg-recent-product-name{
-    margin-top:6px;
+    min-height:42px;
+    margin:0;
+    padding:8px 7px 9px;
     font-size:11px;
     line-height:1.25;
     text-align:center;
+    color:#333;
+    background:#fff;
   }
 
   @keyframes sgRecentHandMove{
