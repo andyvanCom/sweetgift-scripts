@@ -59,7 +59,7 @@
     },
     {
       "name": "top-widgets",
-      "enabled": false,
+      "enabled": true,
       "src": "sweetgift-top-widgets.js",
       "version": "1",
       "pages": ["all"]
