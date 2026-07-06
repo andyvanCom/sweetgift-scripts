@@ -1,5 +1,5 @@
 {
-  "version": "1.0.4",
+  "version": "1.0.5",
   "modules": [
     {
       "name": "core",
@@ -75,7 +75,7 @@
   "name": "top-articles",
   "enabled": true,
   "src": "sweetgift-top-articles.js",
-  "version": "1",
+  "version": "2",
   "pages": ["/top/articles", "/top/articles/"]
 },
     {
