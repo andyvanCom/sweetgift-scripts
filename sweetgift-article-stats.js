@@ -466,6 +466,8 @@ SweetGift.ru | Article Stats
     injectCss();
     initMobileTooltips();
 
+
+
     loadSupabase(function(){
       const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -474,10 +476,19 @@ SweetGift.ru | Article Stats
       const likeStorage = 'sg-liked-' + articleKey;
       const readTime = getReadingTime(articleKey);
 
-      sb.rpc('increment_article_view', {
-        p_article_key: articleKey,
-        p_title: articleTitle
-      }).then(function(res){
+sb.rpc('increment_article_view_daily', {
+  p_article_key: articleKey,
+  p_title: articleTitle
+}).then(function(dailyRes){
+  if(dailyRes.error){
+    console.log('Supabase daily view error:', dailyRes.error);
+  }
+});
+
+sb.rpc('increment_article_view', {
+  p_article_key: articleKey,
+  p_title: articleTitle
+}).then(function(res){
 
         if(res.error){
           console.log('Supabase view error:', res.error);
