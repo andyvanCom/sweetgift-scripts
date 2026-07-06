@@ -75,7 +75,7 @@
   "name": "top-articles",
   "enabled": true,
   "src": "sweetgift-top-articles.js",
-  "version": "2",
+  "version": "3",
   "pages": ["/top/articles", "/top/articles/"]
 },
     {
