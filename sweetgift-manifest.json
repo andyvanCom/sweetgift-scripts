@@ -71,6 +71,13 @@
       "version": "1",
       "pages": ["/stati/*"]
 },
+{
+  "name": "top-articles",
+  "enabled": true,
+  "src": "sweetgift-top-articles.js",
+  "version": "1",
+  "pages": ["/top/articles", "/top/articles/"]
+},
     {
       "name": "product-top-lists",
       "enabled": false,
