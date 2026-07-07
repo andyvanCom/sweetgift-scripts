@@ -78,6 +78,13 @@
   "version": "3",
   "pages": ["/top/articles", "/top/articles/"]
 },
+{
+  "name": "product-seo-blocks",
+  "enabled": true,
+  "src": "sweetgift-product-seo-blocks.js",
+  "version": "1",
+  "pages": ["all"]
+},
     {
       "name": "product-top-lists",
       "enabled": false,
