@@ -2,12 +2,9 @@
 ===========================================================================
 SweetGift.ru | Product SEO Blocks
 ---------------------------------------------------------------------------
-Блоки в карточке товара:
-✓ Входит в списки
-✓ Про ингредиенты
-✓ Похожие композиции
-
-Работает только на страницах, где URL содержит /tproduct/
+Универсальные SEO-блоки в карточке товара.
+Данные берутся из get_product_card_seo_blocks_cached.
+Работает только на страницах /tproduct/.
 ===========================================================================
 */
 
@@ -47,10 +44,12 @@ SweetGift.ru | Product SEO Blocks
 
   function formatPrice(price) {
     var n = Number(price || 0);
-
     if (!n) return '';
-
     return n.toLocaleString('ru-RU') + ' ₽';
+  }
+
+  function hasItems(items) {
+    return Array.isArray(items) && items.length > 0;
   }
 
   function injectCss() {
@@ -132,7 +131,7 @@ SweetGift.ru | Product SEO Blocks
   text-decoration:none!important;
   font-size:15px;
   line-height:1.35;
-  padding:0 0 0 18px;
+  padding-left:18px;
   position:relative;
 }
 
@@ -210,10 +209,6 @@ SweetGift.ru | Product SEO Blocks
   color:#e60000;
 }
 
-.sg-product-seo-empty{
-  display:none;
-}
-
 @media(max-width:980px){
   .sg-product-seo-grid{
     grid-template-columns:1fr;
@@ -275,22 +270,14 @@ SweetGift.ru | Product SEO Blocks
     padding-right:14px;
   }
 
-  .sg-product-seo-section-full .sg-product-seo-title{
-    padding:0 0 0 0;
-  }
-
   .sg-product-seo-product-body{
     padding:8px;
   }
 
-  .sg-product-seo-product-name{
-    font-size:12px;
-    text-align:center;
-  }
-
+  .sg-product-seo-product-name,
   .sg-product-seo-product-price{
-    text-align:center;
     font-size:12px;
+    text-align:center;
   }
 }
 `;
@@ -301,63 +288,55 @@ SweetGift.ru | Product SEO Blocks
     document.head.appendChild(style);
   }
 
-  function hasItems(items) {
-    return Array.isArray(items) && items.length > 0;
-  }
-
-  function renderLists(items) {
-    if (!hasItems(items)) return '';
+  function renderChips(block) {
+    if (!hasItems(block.items)) return '';
 
     var html =
       '<section class="sg-product-seo-section">' +
-        '<h2 class="sg-product-seo-title">Входит в списки</h2>' +
+        '<h2 class="sg-product-seo-title">' + escapeHtml(block.title || 'Подборки') + '</h2>' +
         '<div class="sg-product-seo-chips">';
 
-    items.forEach(function (item) {
+    block.items.forEach(function (item) {
       html +=
         '<a class="sg-product-seo-chip" href="' + escapeHtml(item.url || '#') + '">' +
           escapeHtml(item.title || 'Подборка') +
         '</a>';
     });
 
-    html +=
-        '</div>' +
-      '</section>';
+    html += '</div></section>';
 
     return html;
   }
 
-  function renderIngredientArticles(items) {
-    if (!hasItems(items)) return '';
+  function renderLinks(block) {
+    if (!hasItems(block.items)) return '';
 
     var html =
       '<section class="sg-product-seo-section">' +
-        '<h2 class="sg-product-seo-title">Про ингредиенты</h2>' +
+        '<h2 class="sg-product-seo-title">' + escapeHtml(block.title || 'Читайте также') + '</h2>' +
         '<div class="sg-product-seo-links">';
 
-    items.forEach(function (item) {
+    block.items.forEach(function (item) {
       html +=
         '<a class="sg-product-seo-link" href="' + escapeHtml(item.url || '#') + '">' +
           escapeHtml(item.title || 'Статья SweetGift') +
         '</a>';
     });
 
-    html +=
-        '</div>' +
-      '</section>';
+    html += '</div></section>';
 
     return html;
   }
 
-  function renderSimilarProducts(items) {
-    if (!hasItems(items)) return '';
+  function renderProducts(block) {
+    if (!hasItems(block.items)) return '';
 
     var html =
       '<section class="sg-product-seo-section sg-product-seo-section-full">' +
-        '<h2 class="sg-product-seo-title">Похожие композиции</h2>' +
+        '<h2 class="sg-product-seo-title">' + escapeHtml(block.title || 'Похожие товары') + '</h2>' +
         '<div class="sg-product-seo-products">';
 
-    items.forEach(function (item) {
+    block.items.forEach(function (item) {
       var title = escapeHtml(item.title || 'Подарок SweetGift');
       var url = escapeHtml(item.url || '#');
       var image = escapeHtml(item.image || '');
@@ -375,22 +354,31 @@ SweetGift.ru | Product SEO Blocks
         '</a>';
     });
 
-    html +=
-        '</div>' +
-      '</section>';
+    html += '</div></section>';
 
     return html;
   }
 
-  function render(root, data) {
-    data = data || {};
+  function renderBlock(block) {
+    if (!block || !block.type) return '';
 
-    var html =
-      '<div class="sg-product-seo-grid">' +
-        renderLists(data.lists || []) +
-        renderIngredientArticles(data.ingredient_articles || []) +
-        renderSimilarProducts(data.similar_products || []) +
-      '</div>';
+    if (block.type === 'chips') return renderChips(block);
+    if (block.type === 'links') return renderLinks(block);
+    if (block.type === 'products') return renderProducts(block);
+
+    return '';
+  }
+
+  function render(root, data) {
+    var blocks = data && Array.isArray(data.blocks) ? data.blocks : [];
+
+    var html = '<div class="sg-product-seo-grid">';
+
+    blocks.forEach(function (block) {
+      html += renderBlock(block);
+    });
+
+    html += '</div>';
 
     if (html.replace(/<[^>]*>/g, '').trim() === '') {
       root.innerHTML = '';
@@ -402,7 +390,6 @@ SweetGift.ru | Product SEO Blocks
 
   function loadOne(root) {
     if (root.getAttribute('data-sg-product-seo-ready') === '1') return;
-
     if (!isProductPage()) return;
 
     if (!window.SG || !window.SG.core || typeof window.SG.core.rpc !== 'function') {
@@ -415,13 +402,11 @@ SweetGift.ru | Product SEO Blocks
     root.setAttribute('data-sg-product-seo-ready', '1');
 
     var productKey = root.getAttribute('data-product-key') || getProductKey();
-    var limit = parseInt(root.getAttribute('data-limit') || '6', 10);
 
     window.SG.core.rpc(
-      'get_product_card_seo_blocks',
+      'get_product_card_seo_blocks_cached',
       {
-        p_product_key: productKey,
-        p_limit: limit
+        p_product_key: productKey
       },
       function (data) {
         render(root, data || {});
