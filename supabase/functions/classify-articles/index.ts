@@ -68,6 +68,10 @@ function classifyArticle(article: Article): Entity[] {
     add(result, article, "product_type", "подарочный набор", 150, "product_type: gift set/gastrobox");
   }
 
+  if (has(text, ["пион", "цвет", "флорист", "букет"])) {
+    add(result, article, "product_type", "цветы и букеты", 130, "product_type: flowers/bouquet");
+  }
+
   // recipients
   const recipients: Array<[string, string[]]> = [
     ["мама", ["мам"]],
@@ -277,6 +281,17 @@ Deno.serve(async (req) => {
 
     if (topListsError) throw new Error(topListsError.message);
 
+    const { data: topicData, error: topicError } = await supabase.rpc(
+      "assign_missing_article_seo_topics",
+    );
+
+    if (topicError) throw new Error(topicError.message);
+
+    const { data: productEntitiesData, error: productEntitiesError } =
+      await supabase.rpc("refresh_product_seo_entities_all");
+
+    if (productEntitiesError) throw new Error(productEntitiesError.message);
+
     if (jobLogId) {
       await supabase.from("system_job_logs").update({
         finished_at: new Date().toISOString(),
@@ -290,6 +305,8 @@ Deno.serve(async (req) => {
           product_card_seo_blocks: refreshData,
           article_product_recommendations: articleProductsData,
           top_lists: topListsData,
+          article_seo_topics: topicData,
+          product_seo_entities: productEntitiesData,
         },
       }).eq("id", jobLogId);
     }
@@ -301,6 +318,8 @@ Deno.serve(async (req) => {
       product_card_seo_blocks: refreshData,
       article_product_recommendations: articleProductsData,
       top_lists: topListsData,
+      article_seo_topics: topicData,
+      product_seo_entities: productEntitiesData,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

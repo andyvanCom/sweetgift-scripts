@@ -277,6 +277,11 @@ serve(async () => {
       deactivated += chunk.length;
     }
 
+    const { data: productEntitiesData, error: productEntitiesError } =
+      await supabase.rpc("refresh_product_seo_entities_all");
+
+    if (productEntitiesError) throw productEntitiesError;
+
     await supabase
       .from("feed_sources")
       .update({
@@ -299,6 +304,7 @@ serve(async () => {
           imported,
           ingredients_inserted: ingredientsInserted,
           deactivated,
+          product_seo_entities: productEntitiesData,
         },
       }).eq("id", jobLogId);
     }
@@ -308,6 +314,7 @@ serve(async () => {
       sourceOffersCount: offers.length,
       sourceCount: sourceProductKeys.size,
       imported,
+      productSeoEntities: productEntitiesData,
       ingredientsInserted,
       deactivated,
       startedAt,
