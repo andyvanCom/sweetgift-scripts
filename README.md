@@ -1,520 +1,308 @@
 # SweetGift Scripts
 
-Общий репозиторий модулей SweetGift.ru.
+Репозиторий frontend-модулей и Supabase Edge Functions для SweetGift.ru.
 
-Используется для:
+Проект используется для:
 
-- JS-модулей сайта
-- Edge Functions Supabase
-- аналитики
-- автоматического импорта каталога
-- генерации SEO-страниц
-- рейтингов товаров
-- AI-функций
+- динамической загрузки JS-модулей сайта;
+- аналитики товаров и статей;
+- рейтингов и популярных подборок;
+- SEO-блоков и перелинковки;
+- импорта каталога и индекса статей;
+- автоматической классификации статей;
+- ежедневного технического отчёта.
 
 ---
 
 # Структура проекта
 
-```
+```text
 sweetgift-scripts/
-
 ├── sweetgift-loader.js
 ├── sweetgift-manifest.json
 ├── sweetgift-core.js
 ├── sweetgift-product-analytics.js
 ├── sweetgift-product-badges.js
+├── sweetgift-product-seo-blocks.js
+├── sweetgift-product-top-lists.js
 ├── sweetgift-live-popup.js
 ├── sweetgift-share.js
 ├── sweetgift-recent-products.js
 ├── sweetgift-top-pages.js
+├── sweetgift-top-widgets.js
+├── sweetgift-top-articles.js
 ├── sweetgift-article-stats.js
-
+├── sweetgift-copy-source.js
 ├── supabase/
+│   ├── config.toml
 │   └── functions/
-│       └── import-yml-products/
-│           └── index.ts
-
-└── README.md
+│       ├── import-yml-products/
+│       ├── import-articles-index/
+│       ├── classify-articles/
+│       └── send-daily-report/
+├── ARCHITECTURE.md
+├── DATABASE.md
+├── SCHEMA.md
+├── FUNCTIONS.md
+├── ROADMAP.md
+└── CHANGELOG.md
 ```
 
 ---
 
 # Загрузка модулей
 
-На сайте подключается только Loader.
+На сайте подключается только loader:
 
-```
+```text
 sweetgift-loader.js
 ```
 
-Он:
+Пример подключения через jsDelivr:
 
-- загружает manifest
-- определяет страницу
-- подключает только нужные модули
-- использует версионирование
-
-пример
-
-```
+```text
 https://cdn.jsdelivr.net/gh/andyvanCom/sweetgift-scripts@main/sweetgift-loader.js?v=stable2
 ```
+
+Loader:
+
+- загружает `sweetgift-manifest.json`;
+- определяет текущую страницу;
+- подключает `sweetgift-core.js`;
+- подключает только подходящие модули;
+- использует версии из manifest для обновления CDN-кеша;
+- предотвращает повторную загрузку модулей.
 
 ---
 
 # Manifest
 
-Версии модулей находятся в
+Список модулей и их версии находятся в:
 
-```
+```text
 sweetgift-manifest.json
 ```
 
-пример
+Типовая запись:
 
-```
+```json
 {
-  "name":"recent-products",
-  "version":"8"
+  "name": "recent-products",
+  "enabled": true,
+  "src": "sweetgift-recent-products.js",
+  "version": "10",
+  "pages": ["all"]
 }
 ```
 
-После изменения JS обязательно увеличивать version.
+После изменения JS-модуля необходимо увеличить его `version` в manifest.
 
 ---
 
-# Core
+# Frontend Modules
 
-Файл
+## Core
 
-```
+```text
 sweetgift-core.js
 ```
 
-Содержит общие функции
+Общие функции для остальных модулей:
 
-- rpc()
-- isProductPage()
-- escapeHtml()
-- fingerprint
-- helpers
+- RPC-запросы;
+- определение типа страницы;
+- экранирование HTML;
+- нормализация URL;
+- служебные идентификаторы;
+- helpers.
 
-Все остальные модули используют Core.
+## Product Analytics
 
----
-
-# Product Analytics
-
-```
+```text
 sweetgift-product-analytics.js
 ```
 
-Отправляет события
+Отправляет обезличенные события товаров в Supabase.
 
-- просмотр товара
-- добавление в корзину
-- избранное
-- клики
+Использует RPC:
 
-Данные сохраняются в Supabase.
-
-Используется RPC
-
-```
+```text
 track_product_event
 ```
 
----
+## Product Badges
 
-# Product Badges
-
-```
+```text
 sweetgift-product-badges.js
 ```
 
-Показывает
+Показывает агрегированную активность товара:
 
-- купили N раз
-- просмотрели N раз
-- популярный товар
-- рекомендации
+- просмотры;
+- популярность;
+- покупки;
+- рекомендации.
 
-Использует агрегированные таблицы.
+## Product SEO Blocks
 
----
-
-# Live Popup
-
+```text
+sweetgift-product-seo-blocks.js
 ```
+
+Выводит готовые SEO-блоки на карточках товаров.
+
+## Product Top Lists
+
+```text
+sweetgift-product-top-lists.js
+```
+
+Модуль для товарных рейтингов. В manifest сейчас отключён.
+
+## Live Popup
+
+```text
 sweetgift-live-popup.js
 ```
 
-Показывает последние действия покупателей.
+Показывает обезличенные уведомления о действиях покупателей.
 
-Использует данные аналитики.
+## Share
 
----
-
-# Recent Products
-
+```text
+sweetgift-share.js
 ```
+
+Добавляет сценарии шаринга страницы и копирования ссылки.
+
+## Recent Products
+
+```text
 sweetgift-recent-products.js
 ```
 
-Показывает
+Показывает блок недавно просмотренных товаров.
 
-Продолжить просмотр
+Особенности:
 
-Особенности
+- хранение в `localStorage`;
+- работа без Supabase;
+- JSON-LD ItemList;
+- lazy loading изображений;
+- адаптивный вывод на desktop и mobile.
 
-- localStorage
-- без Supabase
-- JSON-LD ItemList
-- lazy loading изображений
+## Top Pages
 
-Desktop
-
-- 4 товара
-
-Mobile
-
-- горизонтальный свайп
-- подсказка "Листайте товары"
-
-Контейнер
-
-```
-<div class="sg-recent-products"></div>
-```
-
----
-
-# Top Pages
-
-```
+```text
 sweetgift-top-pages.js
 ```
 
-Используется на страницах
+Используется на страницах:
 
-```
+```text
 /top/*
 ```
 
-Поддерживает разные режимы
+Использует RPC:
 
-```
-popular
-
-category
-
-ingredient
-
-custom
-```
-
-Использует RPC
-
-```
+```text
 get_public_top_lists_page_period
 ```
 
----
+## Top Widgets
 
-# Article Stats
-
+```text
+sweetgift-top-widgets.js
 ```
+
+Показывает компактные виджеты рейтингов на страницах сайта.
+
+## Top Articles
+
+```text
+sweetgift-top-articles.js
+```
+
+Используется для рейтингов популярных статей.
+
+## Article Stats
+
+```text
 sweetgift-article-stats.js
 ```
 
-Показывает
+Показывает статистику статьи:
 
-- просмотры
-- время чтения
-- популярность статьи
+- просмотры;
+- время чтения;
+- лайки;
+- популярность.
+
+## Copy Source
+
+```text
+sweetgift-copy-source.js
+```
+
+Добавляет ссылку на источник при копировании текста статьи.
 
 ---
 
-# Supabase
+# Supabase Edge Functions
 
-Используется
+## import-yml-products
 
-- Analytics
-- Product Catalog
-- Ingredients
-- Ratings
-- Top Lists
+Импортирует товарный каталог из YML-фида Tilda.
 
----
+Обновляет:
 
-# Edge Function
+- `products_catalog`;
+- `product_ingredients`;
+- `feed_sources`.
 
-```
-import-yml-products
-```
+## import-articles-index
 
-Назначение
+Импортирует индекс статей из sitemap-фидов SweetGift.ru.
 
-Импорт товаров из YML Tilda.
+Обновляет:
 
-Источник
+- `articles_index`;
+- связанные автоматические теги и метаданные.
 
-```
-https://sweetgift.ru/tstore/yml/b0c84d5fa302ff1f376384ee71710226.yml
-```
+## classify-articles
 
-Импортирует
+Классифицирует статьи по тематическим сущностям:
 
-- товары
-- изображения
-- цену
-- старую цену
-- описание
-- состав
-- доступность
+- recipient;
+- occasion;
+- age;
+- product_type;
+- style;
+- ingredient.
 
-После импорта автоматически разбирает ингредиенты.
+## send-daily-report
 
-Последний импорт
+Формирует и отправляет ежедневный технический отчёт.
 
-```
-694 товаров
-4720 ингредиентов
-```
+Секреты и SMTP-настройки хранятся только в переменных окружения Supabase.
 
 ---
 
-# Таблицы
+# Документация
 
-## products_catalog
-
-Основной каталог.
-
-Используется
-
-- похожие товары
-- SEO
-- фильтры
-- AI
+- `ARCHITECTURE.md` — общая архитектура платформы.
+- `DATABASE.md` — логика базы данных и подсистем.
+- `SCHEMA.md` — справочник таблиц и связей.
+- `FUNCTIONS.md` — Edge Functions, RPC и плановые задачи.
+- `ROADMAP.md` — планы развития.
+- `CHANGELOG.md` — история значимых изменений.
 
 ---
 
-## product_ingredients
-
-Связь
-
-```
-товар
-↓
-
-ингредиент
-↓
-
-tag
-```
-
-Например
-
-```
-cheese
-
-caviar
-
-coffee
-
-honey
-```
-
----
-
-# Распознаваемые ингредиенты
-
-Сейчас
-
-- икра
-- сыр
-- колбаса
-- чай
-- кофе
-- мёд
-- варенье
-- краб
-- мясо
-- олень
-- медведь
-- сёмга
-- оливки
-- конфеты
-- шоколад
-- печенье
-- виноград
-- яблоки
-- папайя
-- питахайя
-- бананы
-- мандарины
-- ананас
-- киви
-- клубника
-- нектарины
-- малина
-- ежевика
-
-Поддерживаются различные склонения слов.
-
----
-
-# Cron
-
-Настроен ежедневный импорт.
-
-```
-04:30 UTC
-```
-
-Job
-
-```
-import-yml-products-daily
-```
-
-После импорта
-
-обновляется
-
-- products_catalog
-- product_ingredients
-
----
-
-# SEO
-
-Планируются автоматические страницы
-
-```
-/podarochnye-korziny-s-syrom
-
-/podarochnye-korziny-s-kofe
-
-/podarochnye-korziny-s-ikroy
-
-/podarochnye-korziny-s-medom
-```
-
-и десятки других.
-
----
-
-# План развития
-
-## AI
-
-Поиск товаров по составу
-
-например
-
-```
-корзина
-
-с сыром
-
-хамоном
-
-кофе
-```
-
----
-
-## SEO
-
-Автоматическая генерация
-
-- Title
-- Description
-- H1
-- тексты
-- перелинковка
-
----
-
-## Рекомендации
-
-Будут использовать одновременно
-
-- аналитику
-- ингредиенты
-- популярность
-- совместные просмотры
-
----
-
-# Обновление JS
-
-После изменения файла
-
-1.
-
-увеличить version
-
-```
-sweetgift-manifest.json
-```
-
-2.
-
-commit
-
-```
-git add .
-
-git commit -m "..."
-```
-
-3.
-
-push
-
-```
-git push
-```
-
-Loader автоматически загрузит новую версию.
-
----
-
-# Проверка версии
-
-```
-window.SG
-```
-
-или
-
-```
-window.SG.recentProducts.version
-```
-
-или
-
-```
-document.querySelector('script[src*="recent-products"]').src
-```
-
----
-
-# Основные технологии
-
-- Tilda
-- Supabase
-- PostgreSQL
-- Edge Functions
-- JSDelivr
-- GitHub
-- Fingerprint
-- pg_cron
-- pg_net
-
----
-
-Проект постоянно развивается.
+# Правила разработки
+
+- Не хранить в репозитории секреты, токены, пароли и service role key.
+- После изменения JS-модуля увеличивать его `version` в `sweetgift-manifest.json`.
+- После изменения Edge Function проверять и деплоить её через Supabase CLI.
+- После изменения базы фиксировать SQL и обновлять документацию.
+- Значимые изменения добавлять в `CHANGELOG.md`.
