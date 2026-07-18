@@ -1,5 +1,5 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.6",
   "modules": [
     {
       "name": "core",
@@ -19,6 +19,13 @@
       "name": "product-analytics",
       "enabled": true,
       "src": "sweetgift-product-analytics.js",
+      "version": "1",
+      "pages": ["all"]
+    },
+    {
+      "name": "order-tracker",
+      "enabled": true,
+      "src": "sweetgift-order-tracker.js",
       "version": "1",
       "pages": ["all"]
     },

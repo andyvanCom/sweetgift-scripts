@@ -22,6 +22,7 @@ sweetgift-scripts/
 ├── sweetgift-manifest.json
 ├── sweetgift-core.js
 ├── sweetgift-product-analytics.js
+├── sweetgift-order-tracker.js
 ├── sweetgift-product-badges.js
 ├── sweetgift-product-seo-blocks.js
 ├── sweetgift-product-top-lists.js
@@ -129,6 +130,16 @@ sweetgift-product-analytics.js
 ```text
 track_product_event
 ```
+
+## Order Tracker
+
+```text
+sweetgift-order-tracker.js
+```
+
+После успешной отправки корзины Tilda записывает через `track_product_order`
+обезличенный состав заказа, суммы, тип доставки и признаки открытки. Имена,
+контакты, адрес и сам текст поздравления в аналитику не передаются.
 
 ## Product Badges
 
