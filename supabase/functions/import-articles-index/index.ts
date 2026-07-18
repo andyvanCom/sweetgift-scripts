@@ -266,15 +266,16 @@ async function runImport(
   offset: number,
   mode: string,
 ) {
-  let items = await getAllArticleFeedItems();
-  const totalFeedUrls = items.length;
+  const allFeedItems = await getAllArticleFeedItems();
+  let items = allFeedItems.slice();
+  const totalFeedUrls = allFeedItems.length;
 
   if (mode === "daily") {
     items = await filterDailyItems(supabaseAdmin, items);
     offset = 0;
   }
 
-  const batch = items.slice(offset, offset + limit);
+  const batch = mode === "daily" ? items : items.slice(offset, offset + limit);
 
   const { data: rulesData, error: rulesError } = await supabaseAdmin
     .from("ingredient_tag_rules")
@@ -297,8 +298,13 @@ async function runImport(
     processed: 0,
     success: 0,
     failed: 0,
-    has_more: offset + limit < items.length,
-    next_offset: offset + limit < items.length ? offset + limit : null,
+    has_more: mode === "daily" ? false : offset + limit < items.length,
+    next_offset: mode === "daily"
+      ? null
+      : offset + limit < items.length
+      ? offset + limit
+      : null,
+    deactivated: 0,
     errors: [] as Array<{ url: string; error: string }>,
     items: [] as Array<unknown>,
   };
@@ -319,6 +325,34 @@ async function runImport(
     }
   }
 
+  if (mode === "daily") {
+    const sourceKeys = new Set(allFeedItems.map((item) => getArticleKey(item.url)));
+    const { data: activeArticles, error: activeArticlesError } = await supabaseAdmin
+      .from("articles_index")
+      .select("article_key")
+      .eq("is_active", true);
+
+    if (activeArticlesError) throw activeArticlesError;
+
+    const missingKeys = (activeArticles || [])
+      .map((row: { article_key: string }) => String(row.article_key))
+      .filter((key: string) => !sourceKeys.has(key));
+
+    for (let i = 0; i < missingKeys.length; i += 100) {
+      const chunk = missingKeys.slice(i, i + 100);
+      const { error: deactivateError } = await supabaseAdmin
+        .from("articles_index")
+        .update({
+          is_active: false,
+          updated_at: new Date().toISOString(),
+        })
+        .in("article_key", chunk);
+
+      if (deactivateError) throw deactivateError;
+      result.deactivated += chunk.length;
+    }
+  }
+
   await supabaseAdmin
     .from("feed_sources")
     .update({
@@ -335,7 +369,23 @@ async function runImport(
 
 export default {
   fetch: withSupabase({ auth: ["publishable", "secret"] }, async (req, ctx) => {
+    const startedAt = new Date().toISOString();
+    const startedMs = Date.now();
+    let jobLogId: number | string | null = null;
+
     try {
+      const { data: jobLog } = await ctx.supabaseAdmin
+        .from("system_job_logs")
+        .insert({
+          job_name: "import-articles-index",
+          started_at: startedAt,
+          status: "running",
+        })
+        .select("id")
+        .maybeSingle();
+
+      jobLogId = jobLog?.id || null;
+
       const url = new URL(req.url);
 
       const limit = Math.min(
@@ -344,16 +394,47 @@ export default {
       );
 
       const offset = Math.max(Number(url.searchParams.get("offset") || "0"), 0);
-      const mode = url.searchParams.get("mode") || "full";
+      const mode = url.searchParams.get("mode") || "daily";
 
       const result = await runImport(ctx.supabaseAdmin, limit, offset, mode);
 
+      if (jobLogId) {
+        await ctx.supabaseAdmin.from("system_job_logs").update({
+          finished_at: new Date().toISOString(),
+          status: result.failed ? "partial" : "success",
+          processed_count: result.processed,
+          duration_ms: Date.now() - startedMs,
+          error_message: result.errors.length
+            ? JSON.stringify(result.errors.slice(0, 5))
+            : null,
+          details: {
+            mode: result.mode,
+            source_count: result.total_feed_urls,
+            candidates: result.total_urls_to_process,
+            success: result.success,
+            failed: result.failed,
+            deactivated: result.deactivated,
+          },
+        }).eq("id", jobLogId);
+      }
+
       return Response.json(result);
     } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+
+      if (jobLogId) {
+        await ctx.supabaseAdmin.from("system_job_logs").update({
+          finished_at: new Date().toISOString(),
+          status: "error",
+          duration_ms: Date.now() - startedMs,
+          error_message: message,
+        }).eq("id", jobLogId);
+      }
+
       return Response.json(
         {
           ok: false,
-          error: e instanceof Error ? e.message : String(e),
+          error: message,
         },
         { status: 500 },
       );

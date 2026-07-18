@@ -192,8 +192,23 @@ Deno.serve(async (req) => {
     return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+  const startedAt = new Date().toISOString();
+  const startedMs = Date.now();
+  let jobLogId: number | string | null = null;
+
   try {
-    const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const { data: jobLog } = await supabase
+      .from("system_job_logs")
+      .insert({
+        job_name: "classify-articles",
+        started_at: startedAt,
+        status: "running",
+      })
+      .select("id")
+      .maybeSingle();
+
+    jobLogId = jobLog?.id || null;
 
     const { data: articles, error } = await supabase
       .from("articles_index")
@@ -262,6 +277,23 @@ Deno.serve(async (req) => {
 
     if (topListsError) throw new Error(topListsError.message);
 
+    if (jobLogId) {
+      await supabase.from("system_job_logs").update({
+        finished_at: new Date().toISOString(),
+        status: "success",
+        processed_count: allArticles.length,
+        duration_ms: Date.now() - startedMs,
+        error_message: null,
+        details: {
+          processed_articles: allArticles.length,
+          inserted_entities: inserted,
+          product_card_seo_blocks: refreshData,
+          article_product_recommendations: articleProductsData,
+          top_lists: topListsData,
+        },
+      }).eq("id", jobLogId);
+    }
+
     return Response.json({
       ok: true,
       processed_articles: allArticles.length,
@@ -271,8 +303,19 @@ Deno.serve(async (req) => {
       top_lists: topListsData,
     });
   } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+
+    if (jobLogId) {
+      await supabase.from("system_job_logs").update({
+        finished_at: new Date().toISOString(),
+        status: "error",
+        duration_ms: Date.now() - startedMs,
+        error_message: message,
+      }).eq("id", jobLogId);
+    }
+
     return Response.json(
-      { ok: false, error: e instanceof Error ? e.message : String(e) },
+      { ok: false, error: message },
       { status: 500 },
     );
   }

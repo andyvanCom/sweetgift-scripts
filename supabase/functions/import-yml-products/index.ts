@@ -87,6 +87,20 @@ function extractWeight(value: string): string | null {
 
 serve(async () => {
   const startedAt = new Date().toISOString();
+  const startedMs = Date.now();
+  let jobLogId: number | string | null = null;
+
+  const { data: jobLog } = await supabase
+    .from("system_job_logs")
+    .insert({
+      job_name: "import-yml-products",
+      started_at: startedAt,
+      status: "running",
+    })
+    .select("id")
+    .maybeSingle();
+
+  jobLogId = jobLog?.id || null;
 
   const { data: feeds, error: feedError } = await supabase
     .from("feed_sources")
@@ -96,6 +110,15 @@ serve(async () => {
     .limit(1);
 
   if (feedError || !feeds?.length) {
+    if (jobLogId) {
+      await supabase.from("system_job_logs").update({
+        finished_at: new Date().toISOString(),
+        status: "error",
+        duration_ms: Date.now() - startedMs,
+        error_message: feedError?.message || "Feed not found",
+      }).eq("id", jobLogId);
+    }
+
     return new Response(JSON.stringify({ ok: false, error: feedError?.message || "Feed not found" }), {
       status: 500,
       headers: { "content-type": "application/json" },
@@ -126,6 +149,10 @@ serve(async () => {
     const shop = parsed?.yml_catalog?.shop;
     const offers = arr(shop?.offers?.offer);
 
+    if (!offers.length) {
+      throw new Error("YML contains no offers; catalog was not changed");
+    }
+
     const { data: rulesRaw, error: rulesError } = await supabase
       .from("ingredient_tag_rules")
       .select("tag, keyword, priority, enabled")
@@ -141,11 +168,14 @@ serve(async () => {
 
     let imported = 0;
     let ingredientsInserted = 0;
+    let deactivated = 0;
+    const sourceProductKeys = new Set<string>();
 
     for (const offer of offers) {
       const url = normalizeUrl(text(offer.url));
       const productKey = productKeyFromUrl(url);
       if (!productKey) continue;
+      sourceProductKeys.add(productKey);
 
       const pictures = arr(offer.picture).map((x) => text(x)).filter(Boolean) as string[];
       const description = text(offer.description);
@@ -223,6 +253,30 @@ serve(async () => {
       imported++;
     }
 
+    const { data: existingProducts, error: existingProductsError } = await supabase
+      .from("products_catalog")
+      .select("product_key,available");
+
+    if (existingProductsError) throw existingProductsError;
+
+    const missingKeys = (existingProducts || [])
+      .filter((row) => row.available !== false && !sourceProductKeys.has(String(row.product_key)))
+      .map((row) => String(row.product_key));
+
+    for (let i = 0; i < missingKeys.length; i += 100) {
+      const chunk = missingKeys.slice(i, i + 100);
+      const { error: deactivateError } = await supabase
+        .from("products_catalog")
+        .update({
+          available: false,
+          updated_at: new Date().toISOString(),
+        })
+        .in("product_key", chunk);
+
+      if (deactivateError) throw deactivateError;
+      deactivated += chunk.length;
+    }
+
     await supabase
       .from("feed_sources")
       .update({
@@ -232,10 +286,30 @@ serve(async () => {
       })
       .eq("id", feed.id);
 
+    if (jobLogId) {
+      await supabase.from("system_job_logs").update({
+        finished_at: new Date().toISOString(),
+        status: "success",
+        processed_count: imported,
+        duration_ms: Date.now() - startedMs,
+        error_message: null,
+        details: {
+          source_offers_count: offers.length,
+          source_unique_products: sourceProductKeys.size,
+          imported,
+          ingredients_inserted: ingredientsInserted,
+          deactivated,
+        },
+      }).eq("id", jobLogId);
+    }
+
     return new Response(JSON.stringify({
       ok: true,
+      sourceOffersCount: offers.length,
+      sourceCount: sourceProductKeys.size,
       imported,
       ingredientsInserted,
+      deactivated,
       startedAt,
     }), {
       headers: { "content-type": "application/json" },
@@ -254,6 +328,15 @@ serve(async () => {
         last_error: message,
       })
       .eq("id", feed.id);
+
+    if (jobLogId) {
+      await supabase.from("system_job_logs").update({
+        finished_at: new Date().toISOString(),
+        status: "error",
+        duration_ms: Date.now() - startedMs,
+        error_message: message,
+      }).eq("id", jobLogId);
+    }
 
     return new Response(JSON.stringify({
       ok: false,
