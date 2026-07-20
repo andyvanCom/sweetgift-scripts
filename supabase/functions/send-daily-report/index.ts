@@ -269,6 +269,7 @@ Deno.serve(async (req) => {
     const subject = `SweetGift Night Report ${today}`;
 
     const html = `
+      <meta charset="UTF-8">
       <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.55;color:#222;">
         <div style="max-width:760px;margin:0 auto;padding:24px;">
           <h2 style="margin:0 0 18px;">SweetGift • Ночной отчет</h2>
@@ -296,7 +297,6 @@ Deno.serve(async (req) => {
       to: REPORT_TO_EMAIL,
       subject,
       html,
-      content: reportText,
     });
 
     await client.close();

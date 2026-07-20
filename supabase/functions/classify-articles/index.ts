@@ -262,35 +262,11 @@ Deno.serve(async (req) => {
       inserted += chunk.length;
     }
 
-    const { data: refreshData, error: refreshError } = await supabase.rpc(
-      "refresh_product_card_seo_blocks_all",
-      { p_limit: 6 },
-    );
-
-    if (refreshError) throw new Error(refreshError.message);
-
-    const { data: articleProductsData, error: articleProductsError } =
-      await supabase.rpc("refresh_article_product_recommendations", {
-        p_limit: 8,
-      });
-
-    if (articleProductsError) throw new Error(articleProductsError.message);
-
-    const { data: topListsData, error: topListsError } =
-      await supabase.rpc("refresh_all_top_lists");
-
-    if (topListsError) throw new Error(topListsError.message);
-
     const { data: topicData, error: topicError } = await supabase.rpc(
       "assign_missing_article_seo_topics",
     );
 
     if (topicError) throw new Error(topicError.message);
-
-    const { data: productEntitiesData, error: productEntitiesError } =
-      await supabase.rpc("refresh_product_seo_entities_all");
-
-    if (productEntitiesError) throw new Error(productEntitiesError.message);
 
     if (jobLogId) {
       await supabase.from("system_job_logs").update({
@@ -302,11 +278,8 @@ Deno.serve(async (req) => {
         details: {
           processed_articles: allArticles.length,
           inserted_entities: inserted,
-          product_card_seo_blocks: refreshData,
-          article_product_recommendations: articleProductsData,
-          top_lists: topListsData,
           article_seo_topics: topicData,
-          product_seo_entities: productEntitiesData,
+          downstream_refreshes: "scheduled separately at 04:50 and 04:55 UTC",
         },
       }).eq("id", jobLogId);
     }
@@ -315,11 +288,7 @@ Deno.serve(async (req) => {
       ok: true,
       processed_articles: allArticles.length,
       inserted_entities: inserted,
-      product_card_seo_blocks: refreshData,
-      article_product_recommendations: articleProductsData,
-      top_lists: topListsData,
       article_seo_topics: topicData,
-      product_seo_entities: productEntitiesData,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

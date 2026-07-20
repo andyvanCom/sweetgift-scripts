@@ -1,7 +1,9 @@
-import "@supabase/functions-js/edge-runtime.d.ts";
-import { withSupabase } from "@supabase/server";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const FEED_URL = "https://sweetgift.ru/sitemap-feeds.xml";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 type Rule = {
   tag: string;
@@ -367,14 +369,21 @@ async function runImport(
   return result;
 }
 
-export default {
-  fetch: withSupabase({ auth: ["publishable", "secret"] }, async (req, ctx) => {
+Deno.serve(async (req) => {
+    const runSecret = Deno.env.get("REPORT_RUN_SECRET");
+    const requestSecret = req.headers.get("x-report-secret");
+
+    if (runSecret && requestSecret !== runSecret) {
+      return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+    }
+
+    const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
     const startedAt = new Date().toISOString();
     const startedMs = Date.now();
     let jobLogId: number | string | null = null;
 
     try {
-      const { data: jobLog } = await ctx.supabaseAdmin
+      const { data: jobLog } = await supabaseAdmin
         .from("system_job_logs")
         .insert({
           job_name: "import-articles-index",
@@ -396,10 +405,10 @@ export default {
       const offset = Math.max(Number(url.searchParams.get("offset") || "0"), 0);
       const mode = url.searchParams.get("mode") || "daily";
 
-      const result = await runImport(ctx.supabaseAdmin, limit, offset, mode);
+      const result = await runImport(supabaseAdmin, limit, offset, mode);
 
       if (jobLogId) {
-        await ctx.supabaseAdmin.from("system_job_logs").update({
+        await supabaseAdmin.from("system_job_logs").update({
           finished_at: new Date().toISOString(),
           status: result.failed ? "partial" : "success",
           processed_count: result.processed,
@@ -423,7 +432,7 @@ export default {
       const message = e instanceof Error ? e.message : String(e);
 
       if (jobLogId) {
-        await ctx.supabaseAdmin.from("system_job_logs").update({
+        await supabaseAdmin.from("system_job_logs").update({
           finished_at: new Date().toISOString(),
           status: "error",
           duration_ms: Date.now() - startedMs,
@@ -439,5 +448,4 @@ export default {
         { status: 500 },
       );
     }
-  }),
-};
+});
