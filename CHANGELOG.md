@@ -9,6 +9,7 @@
 ## Product card cold load
 
 - manifest загружается сразу, без ожидания `DOMContentLoaded`;
+- loader определяет текущий commit GitHub и загружает manifest и модули по неизменяемому SHA;
 - `core` загружается раньше зависимых frontend-модулей;
 - RPC выполняются напрямую через REST и больше не ждут загрузки Supabase SDK;
 - SEO-блоки повторяют запрос после временной ошибки;

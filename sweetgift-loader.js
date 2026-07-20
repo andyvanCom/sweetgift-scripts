@@ -12,11 +12,11 @@ SweetGift.ru | Main Scripts Loader
   'use strict';
 
   var REPO_BASE = 'https://cdn.jsdelivr.net/gh/andyvanCom/sweetgift-scripts@main/';
-  var MANIFEST_URL = REPO_BASE + 'sweetgift-manifest.json?v=' + Date.now();
+  var COMMIT_API = 'https://api.github.com/repos/andyvanCom/sweetgift-scripts/commits/main';
 
   window.SG = window.SG || {};
   window.SG.loader = window.SG.loader || {};
-  window.SG.loader.version = '1.1.0';
+  window.SG.loader.version = '1.2.0';
   window.SG.loader.loaded = window.SG.loader.loaded || {};
 
   function log() {
@@ -121,8 +121,23 @@ SweetGift.ru | Main Scripts Loader
   }
 
   function start() {
-    fetch(MANIFEST_URL)
+    fetch(COMMIT_API, { cache: 'no-store' })
       .then(function (response) {
+        if (!response.ok) throw new Error('Commit API ' + response.status);
+        return response.json();
+      })
+      .then(function (commit) {
+        if (commit && commit.sha) {
+          REPO_BASE = 'https://cdn.jsdelivr.net/gh/andyvanCom/sweetgift-scripts@' + commit.sha + '/';
+        }
+
+        return fetch(REPO_BASE + 'sweetgift-manifest.json');
+      })
+      .catch(function () {
+        return fetch(REPO_BASE + 'sweetgift-manifest.json?v=' + Date.now());
+      })
+      .then(function (response) {
+        if (!response.ok) throw new Error('Manifest HTTP ' + response.status);
         return response.json();
       })
       .then(function (manifest) {
