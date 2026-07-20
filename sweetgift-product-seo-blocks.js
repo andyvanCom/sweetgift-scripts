@@ -16,6 +16,8 @@ SweetGift.ru | Product SEO Blocks
   var VERSION = '2';
   var CSS_ID = 'sg-product-seo-blocks-css';
   var ROOT_SELECTOR = '.sg-product-seo-blocks';
+  var CACHE_PREFIX = 'sg_product_seo_v2_';
+  var CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 
   window.SG.productSeoBlocks = {
     version: VERSION
@@ -27,6 +29,50 @@ SweetGift.ru | Product SEO Blocks
 
   function getProductKey() {
     return window.location.pathname.replace(/\/$/, '');
+  }
+
+  function readCache(productKey) {
+    try {
+      var cached = JSON.parse(localStorage.getItem(CACHE_PREFIX + productKey) || 'null');
+      if (!cached || !cached.data || Date.now() - cached.savedAt > CACHE_TTL) return null;
+      return cached.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeCache(productKey, data) {
+    try {
+      localStorage.setItem(CACHE_PREFIX + productKey, JSON.stringify({
+        savedAt: Date.now(),
+        data: data
+      }));
+    } catch (e) {}
+  }
+
+  function fallbackData(productKey) {
+    var parts = String(productKey || '').split('/').filter(Boolean);
+    var category = parts[0] && parts[0] !== 'tproduct' ? '/' + parts[0] : '/catalog';
+
+    return {
+      blocks: [
+        {
+          type: 'chips',
+          title: 'Популярные списки SweetGift',
+          items: [{ title: 'Все рейтинги подарков', url: '/top/' }]
+        },
+        {
+          type: 'links',
+          title: 'Советы и статьи',
+          items: [{ title: 'Идеи подарков и полезные советы', url: '/stati/' }]
+        },
+        {
+          type: 'links',
+          title: 'Похожие композиции',
+          items: [{ title: 'Посмотреть другие товары категории', url: category }]
+        }
+      ]
+    };
   }
 
   function escapeHtml(text) {
@@ -399,10 +445,13 @@ SweetGift.ru | Product SEO Blocks
       return;
     }
 
+    var productKey = root.getAttribute('data-product-key') || getProductKey();
+    var cached = readCache(productKey);
+
+    render(root, cached || fallbackData(productKey));
+
     root.setAttribute('data-sg-product-seo-ready', '1');
     root.setAttribute('aria-busy', 'true');
-
-    var productKey = root.getAttribute('data-product-key') || getProductKey();
 
     window.SG.core.rpc(
       'get_product_card_seo_blocks_cached',
@@ -410,17 +459,26 @@ SweetGift.ru | Product SEO Blocks
         p_product_key: productKey
       },
       function (data) {
-        render(root, data || {});
+        if (data && Array.isArray(data.blocks) && data.blocks.length) {
+          render(root, data);
+          writeCache(productKey, data);
+        }
         root.removeAttribute('aria-busy');
+        root.setAttribute('data-sg-product-seo-attempts', '0');
       },
       function (error) {
         console.log('[SG Product SEO Blocks]', error);
         root.removeAttribute('data-sg-product-seo-ready');
         root.removeAttribute('aria-busy');
 
-        setTimeout(function () {
-          loadOne(root);
-        }, 1000);
+        var attempts = Number(root.getAttribute('data-sg-product-seo-attempts') || 0) + 1;
+        root.setAttribute('data-sg-product-seo-attempts', String(attempts));
+
+        if (attempts < 3) {
+          setTimeout(function () {
+            loadOne(root);
+          }, attempts * 1000);
+        }
       }
     );
   }

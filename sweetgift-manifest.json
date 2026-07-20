@@ -89,7 +89,7 @@
   "name": "product-seo-blocks",
   "enabled": true,
   "src": "sweetgift-product-seo-blocks.js",
-  "version": "2",
+  "version": "3",
   "pages": ["all"]
 },
     {
