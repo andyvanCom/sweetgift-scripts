@@ -1,11 +1,11 @@
 {
-  "version": "1.0.6",
+  "version": "1.0.7",
   "modules": [
     {
       "name": "core",
       "enabled": true,
       "src": "sweetgift-core.js",
-      "version": "3",
+      "version": "4",
       "pages": ["all"]
     },
     {
@@ -54,7 +54,7 @@
       "name": "recent-products",
       "enabled": true,
       "src": "sweetgift-recent-products.js",
-      "version": "10",
+      "version": "11",
       "pages": ["all"]
     },
     {
@@ -89,7 +89,7 @@
   "name": "product-seo-blocks",
   "enabled": true,
   "src": "sweetgift-product-seo-blocks.js",
-  "version": "1",
+  "version": "2",
   "pages": ["all"]
 },
     {

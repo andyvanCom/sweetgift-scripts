@@ -16,7 +16,7 @@ SweetGift.ru | Main Scripts Loader
 
   window.SG = window.SG || {};
   window.SG.loader = window.SG.loader || {};
-  window.SG.loader.version = '1.0.0';
+  window.SG.loader.version = '1.1.0';
   window.SG.loader.loaded = window.SG.loader.loaded || {};
 
   function log() {
@@ -52,11 +52,15 @@ SweetGift.ru | Main Scripts Loader
     return false;
   }
 
-  function loadScript(module) {
-    if (!module.src || !module.name) return;
+  function loadScript(module, callback) {
+    if (!module.src || !module.name) {
+      if (callback) callback();
+      return;
+    }
 
     if (window.SG.loader.loaded[module.name]) {
       log('Already loaded:', module.name);
+      if (callback) callback();
       return;
     }
 
@@ -77,6 +81,7 @@ SweetGift.ru | Main Scripts Loader
     script.onload = function () {
       window.SG.loader.loaded[module.name] = true;
       log('Loaded:', module.name);
+      if (callback) callback();
     };
 
     script.onerror = function () {
@@ -92,7 +97,23 @@ SweetGift.ru | Main Scripts Loader
       return;
     }
 
-    manifest.modules.forEach(function (module) {
+    var modules = manifest.modules.filter(shouldLoadModule);
+    var coreModule = modules.find(function (module) {
+      return module.name === 'core';
+    });
+
+    var loadRest = function () {
+      modules.forEach(function (module) {
+        if (module.name !== 'core') loadScript(module);
+      });
+    };
+
+    if (coreModule) {
+      loadScript(coreModule, loadRest);
+      return;
+    }
+
+    modules.forEach(function (module) {
       if (shouldLoadModule(module)) {
         loadScript(module);
       }
@@ -113,10 +134,6 @@ SweetGift.ru | Main Scripts Loader
       });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', start);
-  } else {
-    start();
-  }
+  start();
 
 })();

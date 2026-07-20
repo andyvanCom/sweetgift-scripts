@@ -24,7 +24,7 @@ SweetGift.ru | Core
 
   var core = window.SG.core;
 
-  core.version = '1.1.0';
+  core.version = '1.2.0';
   core.debug = core.debug || false;
 
   core._supabaseClient = core._supabaseClient || null;
@@ -237,20 +237,41 @@ SweetGift.ru | Core
   };
 
   core.rpc = function (name, params, callback, errorCallback) {
-    core.supabase(function (sb) {
-      sb.rpc(name, params || {}).then(function (res) {
-        if (res.error) {
-          if (errorCallback) {
-            errorCallback(res.error);
-          } else {
-            warn('RPC error:', name, res.error);
-          }
-          return;
-        }
+    var url = SUPABASE_URL + '/rest/v1/rpc/' + encodeURIComponent(name);
 
-        if (callback) callback(res.data);
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(params || {})
+    })
+      .then(function (response) {
+        return response.text().then(function (body) {
+          var data = body ? safeJsonParse(body, body) : null;
+
+          if (!response.ok) {
+            var error = data && typeof data === 'object'
+              ? data
+              : { message: String(data || response.statusText), status: response.status };
+            throw error;
+          }
+
+          return data;
+        });
+      })
+      .then(function (data) {
+        if (callback) callback(data);
+      })
+      .catch(function (error) {
+        if (errorCallback) {
+          errorCallback(error);
+        } else {
+          warn('RPC error:', name, error);
+        }
       });
-    });
   };
 
   core.currentPath = function () {

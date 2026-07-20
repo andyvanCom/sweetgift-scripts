@@ -17,7 +17,7 @@ SweetGift.ru | Recent Products
 
   var STORAGE_KEY = 'sg_recent_products_v1';
   var CSS_ID = 'sg-recent-products-css';
-  var VERSION = '8';
+  var VERSION = '11';
 
   var MAX_STORE = 20;
   var MAX_SHOW = 4;
@@ -413,10 +413,33 @@ SweetGift.ru | Recent Products
     }, 1000);
   }
 
+  function observe() {
+    if (!window.MutationObserver) return;
+
+    var observer = new MutationObserver(function (mutations) {
+      var hasNewRoot = mutations.some(function (mutation) {
+        return Array.prototype.some.call(mutation.addedNodes || [], function (node) {
+          return node.nodeType === 1 && (
+            (node.matches && node.matches('.sg-recent-products')) ||
+            (node.querySelector && node.querySelector('.sg-recent-products'))
+          );
+        });
+      });
+
+      if (hasNewRoot) render();
+    });
+
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', function () {
+      init();
+      observe();
+    });
   } else {
     init();
+    observe();
   }
 
 })();

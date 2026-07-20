@@ -13,7 +13,7 @@ SweetGift.ru | Product SEO Blocks
 
   window.SG = window.SG || {};
 
-  var VERSION = '1';
+  var VERSION = '2';
   var CSS_ID = 'sg-product-seo-blocks-css';
   var ROOT_SELECTOR = '.sg-product-seo-blocks';
 
@@ -400,6 +400,7 @@ SweetGift.ru | Product SEO Blocks
     }
 
     root.setAttribute('data-sg-product-seo-ready', '1');
+    root.setAttribute('aria-busy', 'true');
 
     var productKey = root.getAttribute('data-product-key') || getProductKey();
 
@@ -410,11 +411,16 @@ SweetGift.ru | Product SEO Blocks
       },
       function (data) {
         render(root, data || {});
+        root.removeAttribute('aria-busy');
       },
       function (error) {
         console.log('[SG Product SEO Blocks]', error);
         root.removeAttribute('data-sg-product-seo-ready');
-        root.innerHTML = '';
+        root.removeAttribute('aria-busy');
+
+        setTimeout(function () {
+          loadOne(root);
+        }, 1000);
       }
     );
   }
