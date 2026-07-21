@@ -7,6 +7,17 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
+const PRODUCT_BATCH_SIZE = 100;
+const INGREDIENT_BATCH_SIZE = 500;
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    result.push(items.slice(i, i + size));
+  }
+  return result;
+}
+
 function arr<T>(value: T | T[] | undefined | null): T[] {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
@@ -90,6 +101,20 @@ serve(async () => {
   const startedMs = Date.now();
   let jobLogId: number | string | null = null;
 
+  // An Edge Function can be terminated by the platform before its catch block
+  // runs. Close only genuinely abandoned previous executions before opening a
+  // new one, otherwise monitoring keeps showing `running` forever.
+  await supabase
+    .from("system_job_logs")
+    .update({
+      finished_at: startedAt,
+      status: "error",
+      error_message: "Previous run exceeded its execution window",
+    })
+    .eq("job_name", "import-yml-products")
+    .eq("status", "running")
+    .lt("started_at", new Date(startedMs - 20 * 60 * 1000).toISOString());
+
   const { data: jobLog } = await supabase
     .from("system_job_logs")
     .insert({
@@ -170,6 +195,8 @@ serve(async () => {
     let ingredientsInserted = 0;
     let deactivated = 0;
     const sourceProductKeys = new Set<string>();
+    const productRowsByKey = new Map<string, Record<string, unknown>>();
+    const ingredientRowsByKey = new Map<string, Record<string, unknown>[]>();
 
     for (const offer of offers) {
       const url = normalizeUrl(text(offer.url));
@@ -181,7 +208,7 @@ serve(async () => {
       const description = text(offer.description);
       const composition = extractComposition(description);
 
-      const row = {
+      productRowsByKey.set(productKey, {
         product_key: productKey,
         title: text(offer.name) || text(offer.model) || text(offer.vendorCode),
         url,
@@ -195,18 +222,7 @@ serve(async () => {
         available: String(offer.available ?? "true") !== "false",
         raw: offer,
         updated_at: new Date().toISOString(),
-      };
-
-      const { error: upsertError } = await supabase
-        .from("products_catalog")
-        .upsert(row, { onConflict: "product_key" });
-
-      if (upsertError) throw upsertError;
-
-      await supabase
-        .from("product_ingredients")
-        .delete()
-        .eq("product_key", productKey);
+      });
 
       const ingredients = splitIngredients(composition);
 
@@ -240,17 +256,42 @@ serve(async () => {
         }));
       });
 
-      if (ingredientRows.length) {
-        const { error: ingredientsError } = await supabase
-          .from("product_ingredients")
-          .insert(ingredientRows);
+      // A YML can contain several offers with the same product URL. Preserve
+      // the old sequential-import semantics: the last offer wins completely.
+      ingredientRowsByKey.set(productKey, ingredientRows);
+    }
 
-        if (ingredientsError) throw ingredientsError;
+    const productRows = Array.from(productRowsByKey.values());
+    const allIngredientRows = Array.from(ingredientRowsByKey.values()).flat();
 
-        ingredientsInserted += ingredientRows.length;
-      }
+    // The old implementation performed an upsert, delete and insert for every
+    // product (more than 2,000 HTTP calls for the current catalog). Batched
+    // writes keep the function well inside the Edge Function execution limit.
+    for (const batch of chunks(productRows, PRODUCT_BATCH_SIZE)) {
+      const { error: upsertError } = await supabase
+        .from("products_catalog")
+        .upsert(batch, { onConflict: "product_key" });
 
-      imported++;
+      if (upsertError) throw upsertError;
+      imported += batch.length;
+    }
+
+    for (const productKeys of chunks(Array.from(sourceProductKeys), PRODUCT_BATCH_SIZE)) {
+      const { error: deleteIngredientsError } = await supabase
+        .from("product_ingredients")
+        .delete()
+        .in("product_key", productKeys);
+
+      if (deleteIngredientsError) throw deleteIngredientsError;
+    }
+
+    for (const batch of chunks(allIngredientRows, INGREDIENT_BATCH_SIZE)) {
+      const { error: ingredientsError } = await supabase
+        .from("product_ingredients")
+        .insert(batch);
+
+      if (ingredientsError) throw ingredientsError;
+      ingredientsInserted += batch.length;
     }
 
     const { data: existingProducts, error: existingProductsError } = await supabase
