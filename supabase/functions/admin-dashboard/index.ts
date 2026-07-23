@@ -239,7 +239,7 @@ Deno.serve(async (req) => {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
       "content-security-policy":
-        "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'",
+        "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors https://sweetgift.ru https://www.sweetgift.ru",
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
     },
