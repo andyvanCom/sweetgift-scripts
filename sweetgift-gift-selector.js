@@ -13,6 +13,13 @@ filters and sorts products locally without additional network requests.
 
   var ROOT_SELECTOR = '[data-sg-gift-selector], #sg-gift-selector';
   var SEARCH_THRESHOLD = 30;
+  var INGREDIENT_ALIASES = {
+    'с икрой': 'икра',
+    'икрой': 'икра',
+    'красная икра': 'икра',
+    'черная икра': 'икра',
+    'чёрная икра': 'икра'
+  };
 
   window.SG = window.SG || {};
   window.SG.giftSelector = window.SG.giftSelector || {
@@ -97,9 +104,14 @@ filters and sorts products locally without additional network requests.
       '.sg-selector-chip-count{opacity:.72;font-weight:500;}',
       '.sg-selector-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:25px 0 16px;}',
       '.sg-selector-count{font-size:17px;font-weight:650;}',
+      '.sg-selector-actions{display:flex;align-items:center;gap:12px;}',
       '.sg-selector-reset{appearance:none;border:0;background:transparent;color:var(--sg-red);padding:8px 0;font:650 14px/1.2 inherit;cursor:pointer;}',
       '.sg-selector-reset:hover{color:var(--sg-red-dark);text-decoration:underline;}',
       '.sg-selector-reset[hidden]{display:none;}',
+      '.sg-selector-share .sg-share-box{margin:0;}',
+      '.sg-selector-share .sg-share-main{height:42px;border-color:var(--sg-line);color:var(--sg-ink);font-size:14px;font-weight:650;}',
+      '.sg-selector-share .sg-share-main:hover{border-color:var(--sg-red);color:var(--sg-red);}',
+      '.sg-selector-share .sg-share-menu{right:0;left:auto;}',
       '.sg-selector-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;}',
       '.sg-selector-card{display:flex;min-width:0;flex-direction:column;overflow:hidden;border:1px solid #eee;border-radius:20px;background:#fff;color:var(--sg-ink)!important;text-decoration:none!important;transition:transform .2s,border-color .2s,box-shadow .2s;}',
       '.sg-selector-card:hover{transform:translateY(-3px);border-color:var(--sg-red);box-shadow:0 12px 28px rgba(0,0,0,.08);}',
@@ -116,7 +128,8 @@ filters and sorts products locally without additional network requests.
       '.sg-selector-status{margin-top:18px;}',
       '@media(max-width:980px){.sg-selector-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}',
       '@media(max-width:720px){.sg-selector{padding:25px 14px 50px;}.sg-selector-panel{padding:17px;border-radius:18px;}.sg-selector-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}.sg-selector-card{border-radius:16px;}.sg-selector-body{padding:12px;}.sg-selector-name{font-size:14px;}.sg-selector-composition{font-size:12px;-webkit-line-clamp:2;}.sg-selector-price{font-size:16px;}}',
-      '@media(max-width:420px){.sg-selector-toolbar{align-items:flex-start;flex-direction:column;gap:4px;}.sg-selector-chip{padding:9px 12px;font-size:13px;}}'
+      '@media(max-width:560px){.sg-selector-toolbar{align-items:flex-start;flex-direction:column;}.sg-selector-actions{width:100%;justify-content:space-between;}.sg-selector-share .sg-share-menu{right:auto;left:0;}.sg-selector-share .sg-share-main{padding:0 14px;}}',
+      '@media(max-width:420px){.sg-selector-chip{padding:9px 12px;font-size:13px;}}'
     ].join('');
 
     document.head.appendChild(style);
@@ -131,7 +144,9 @@ filters and sorts products locally without additional network requests.
     });
 
     return raw.split(',').map(function (item) {
-      return knownMap[normalize(item)];
+      var normalized = normalize(item);
+      var canonical = INGREDIENT_ALIASES[normalized] || normalized;
+      return knownMap[canonical];
     }).filter(Boolean).filter(function (item, index, items) {
       return items.indexOf(item) === index;
     });
@@ -233,7 +248,10 @@ filters and sorts products locally without additional network requests.
         '</section>' +
         '<div class="sg-selector-toolbar">' +
           '<div class="sg-selector-count" aria-live="polite"></div>' +
-          '<button class="sg-selector-reset" type="button">Сбросить фильтр</button>' +
+          '<div class="sg-selector-actions">' +
+            '<button class="sg-selector-reset" type="button">Сбросить фильтр</button>' +
+            '<div class="sg-selector-share"></div>' +
+          '</div>' +
         '</div>' +
         '<div class="sg-selector-grid"></div>';
 
@@ -242,6 +260,49 @@ filters and sorts products locally without additional network requests.
       var count = shell.querySelector('.sg-selector-count');
       var reset = shell.querySelector('.sg-selector-reset');
       var searchInput = shell.querySelector('.sg-selector-search-input');
+      var shareRoot = shell.querySelector('.sg-selector-share');
+      var shareBox = null;
+      var shareAttempts = 0;
+
+      function shareTitle() {
+        return selected.length
+          ? 'Подарочные корзины с ингредиентами: ' +
+            selected.map(displayName).join(', ')
+          : 'Подбор подарочных корзин по составу';
+      }
+
+      function updateShare() {
+        if (!shareBox || !shareBox.__sgShareOptions) return;
+
+        shareBox.__sgShareOptions.title = shareTitle();
+        shareBox.__sgShareOptions.text =
+          'Посмотрите эту подборку подарочных корзин SweetGift';
+        shareBox.__sgShareOptions.url = window.location.href;
+      }
+
+      function ensureShareButton() {
+        if (shareBox || !shareRoot) return;
+
+        if (
+          window.SG &&
+          window.SG.share &&
+          typeof window.SG.share.create === 'function'
+        ) {
+          shareBox = window.SG.share.create({
+            buttonText: 'Поделиться подборкой',
+            title: shareTitle(),
+            text: 'Посмотрите эту подборку подарочных корзин SweetGift',
+            url: window.location.href
+          });
+          shareRoot.appendChild(shareBox);
+          return;
+        }
+
+        shareAttempts += 1;
+        if (shareAttempts < 30) {
+          setTimeout(ensureShareButton, 100);
+        }
+      }
 
       function renderChips() {
         var needle = normalize(search);
@@ -340,6 +401,7 @@ filters and sorts products locally without additional network requests.
         renderChips();
         renderProducts();
         writeUrlIngredients(selected);
+        updateShare();
       }
 
       chipsRoot.addEventListener('click', function (event) {
@@ -372,6 +434,7 @@ filters and sorts products locally without additional network requests.
         });
       }
 
+      ensureShareButton();
       render();
     });
   }
