@@ -5,6 +5,8 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RUN_SECRET = Deno.env.get("REPORT_RUN_SECRET") || "";
 const PUBLISHABLE_KEY = "sb_publishable_JrPJQVLLpcDxjte5OSCnvg_ocvpBqqT";
+const ADMIN_URL =
+  "https://rvgvbxipccbkytmhltmi.functions.supabase.co/admin-dashboard";
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 const json = (data: unknown, status = 200) =>
@@ -13,6 +15,9 @@ const json = (data: unknown, status = 200) =>
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
+      "access-control-allow-origin": "*",
+      "access-control-allow-headers": "authorization,content-type",
+      "access-control-allow-methods": "GET,POST,OPTIONS",
     },
   });
 
@@ -201,11 +206,11 @@ const HTML = `<!doctype html><html lang="ru"><head>
 <section class="section cols"><div><h2>Популярные товары</h2><div id="products" class="card"></div></div><div><h2>Категории</h2><div id="categories" class="card"></div></div></section>
 <section class="section cols"><div><h2>Последние заказы</h2><div class="card"><table><thead><tr><th>Заказ</th><th>Дата</th><th>Позиций</th><th>Сумма</th></tr></thead><tbody id="orders"></tbody></table></div></div><div><h2>Ежедневный отчёт</h2><div id="report" class="report"></div></div></section>
 </main><script>
-const AUTH_URL="${SUPABASE_URL}/auth/v1",AUTH_KEY="${PUBLISHABLE_KEY}",state={session:JSON.parse(localStorage.getItem("sg_admin_session")||"null")},el=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),money=v=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:0}).format(Number(v)||0),date=v=>v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):"—";
+const AUTH_URL="${SUPABASE_URL}/auth/v1",AUTH_KEY="${PUBLISHABLE_KEY}",ADMIN_URL="${ADMIN_URL}",state={session:JSON.parse(localStorage.getItem("sg_admin_session")||"null")},el=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),money=v=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:0}).format(Number(v)||0),date=v=>v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):"—";
 function saveSession(value){state.session=value;if(value)localStorage.setItem("sg_admin_session",JSON.stringify(value));else localStorage.removeItem("sg_admin_session")}
 async function authRequest(grant,body){const r=await fetch(AUTH_URL+"/token?grant_type="+grant,{method:"POST",headers:{"apikey":AUTH_KEY,"content-type":"application/json"},body:JSON.stringify(body)}),data=await r.json();if(!r.ok)throw new Error(data.error_description||data.msg||"Ошибка входа");data.expires_at=Math.floor(Date.now()/1000)+(data.expires_in||3600);saveSession(data);return data}
 async function ensureSession(){if(!state.session)throw new Error("Требуется вход");if((state.session.expires_at||0)>Math.floor(Date.now()/1000)+60)return state.session;return await authRequest("refresh_token",{refresh_token:state.session.refresh_token})}
-async function api(path,options={}){const session=await ensureSession(),base=location.pathname.replace(/\\/$/,"");const r=await fetch(base+"/"+path,{...options,headers:{...(options.headers||{}),"authorization":"Bearer "+session.access_token,"content-type":"application/json"}}),b=await r.json();if(!r.ok)throw new Error(b.error||"Ошибка запроса");return b}
+async function api(path,options={}){const session=await ensureSession(),r=await fetch(ADMIN_URL+"/"+path,{...options,headers:{...(options.headers||{}),"authorization":"Bearer "+session.access_token,"content-type":"application/json"}}),b=await r.json();if(!r.ok)throw new Error(b.error||"Ошибка запроса");return b}
 function bars(id,rows,key="name"){const max=Math.max(1,...rows.map(x=>+x.value||0));el(id).innerHTML=rows.length?rows.map(x=>'<div class="barrow"><div class="barname" title="'+esc(x[key])+'">'+esc(x[key])+'</div><div class="bar"><i style="width:'+Math.max(3,(+x.value||0)/max*100)+'%"></i></div><b>'+esc(x.value)+'</b></div>').join(""):'<div class="sub">Пока нет данных</div>'}
 function render(d){const o=d.orders;el("metrics").innerHTML=[["Заказы",o.total],["Выручка",money(o.revenue)],["Средний чек",money(o.average_check)],["Товаров продано",o.items],["Подарки",o.gifts],["С поздравлением",o.messages],["С промокодом",o.promocodes],["Каталог",d.catalog.products+" / "+d.catalog.articles]].map(x=>'<div class="metric card"><div class="sub">'+esc(x[0])+'</div><b>'+esc(x[1])+'</b></div>').join("");el("jobs").innerHTML=d.pipeline.map(j=>'<tr><td>'+esc(j.job_name)+'</td><td><span class="status '+(j.status==="success"?"success":"")+'"><i class="dot"></i>'+esc(j.status)+'</span></td><td>'+esc(j.processed_count)+'</td><td>'+date(j.finished_at||j.started_at)+'</td></tr>').join("");bars("daily",o.daily,"date");bars("products",o.top_products);bars("categories",o.top_categories);el("orders").innerHTML=o.recent.length?o.recent.map(x=>'<tr><td>…'+esc(x.order_id)+'</td><td>'+date(x.created_at)+'</td><td>'+esc(x.items)+'</td><td>'+money(x.total)+'</td></tr>').join(""):'<tr><td colspan="4" class="sub">Заказов за период нет</td></tr>';el("report").textContent=d.report}
 async function load(){el("refresh").disabled=true;try{render(await api("api/dashboard?days="+el("period").value));el("login").classList.add("hidden");el("app").classList.remove("hidden")}finally{el("refresh").disabled=false}}
@@ -215,6 +220,16 @@ document.querySelectorAll("[data-action]").forEach(b=>b.onclick=async()=>{const 
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
+  if (req.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "authorization,content-type",
+        "access-control-allow-methods": "GET,POST,OPTIONS",
+      },
+    });
+  }
   if (url.pathname.endsWith("/api/dashboard")) {
     if (!await authorized(req)) {
       return json({ ok: false, error: "Нет доступа администратора" }, 401);
@@ -250,6 +265,7 @@ Deno.serve(async (req) => {
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
+      "access-control-allow-origin": "*",
       "content-security-policy":
         "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' https://rvgvbxipccbkytmhltmi.supabase.co; frame-ancestors https://sweetgift.ru https://www.sweetgift.ru",
       "x-content-type-options": "nosniff",
