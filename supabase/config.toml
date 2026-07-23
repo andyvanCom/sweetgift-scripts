@@ -31,3 +31,8 @@ entrypoint = "./functions/classify-articles/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/classify-articles/*.html" ]
+
+[functions.admin-dashboard]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/admin-dashboard/index.ts"
