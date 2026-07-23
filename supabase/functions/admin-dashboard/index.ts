@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RUN_SECRET = Deno.env.get("REPORT_RUN_SECRET") || "";
+const PUBLISHABLE_KEY = "sb_publishable_JrPJQVLLpcDxjte5OSCnvg_ocvpBqqT";
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 const json = (data: unknown, status = 200) =>
@@ -15,9 +16,13 @@ const json = (data: unknown, status = 200) =>
     },
   });
 
-function authorized(req: Request) {
-  return Boolean(RUN_SECRET) &&
-    req.headers.get("x-report-secret") === RUN_SECRET;
+async function authorized(req: Request) {
+  const authorization = req.headers.get("authorization") || "";
+  const token = authorization.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return false;
+
+  const { data, error } = await supabase.auth.getUser(token);
+  return !error && data.user?.app_metadata?.role === "admin";
 }
 
 function num(value: unknown) {
@@ -188,7 +193,7 @@ const HTML = `<!doctype html><html lang="ru"><head>
 <style>
 :root{--ink:#261d1f;--muted:#786b6e;--line:#eadfdd;--red:#a9284d;--red2:#d85c7b;--ok:#24835d;--bad:#c04444;--shadow:0 14px 40px #43202914}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(145deg,#fff8f3,#f5eff1 55%,#f7eee9);color:var(--ink);font:15px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit}.wrap{max-width:1240px;margin:auto;padding:28px 20px 60px}.top,.brand,.toolbar{display:flex;align-items:center}.top{justify-content:space-between;gap:16px;margin-bottom:22px}.brand{gap:12px}.logo{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;color:#fff;font-size:21px;font-weight:800;background:linear-gradient(135deg,var(--red),var(--red2));box-shadow:var(--shadow)}h1,h2{margin:0}h1{font-size:25px}.sub{color:var(--muted);font-size:13px}.card,.login{background:#fffffff0;border:1px solid var(--line);border-radius:19px;box-shadow:var(--shadow)}.login{max-width:440px;margin:12vh auto;padding:30px}.field,.toolbar{gap:9px}.field{display:flex;margin-top:18px}.field input{min-width:0;flex:1;border:1px solid var(--line);border-radius:12px;padding:12px}.btn{border:0;border-radius:12px;padding:11px 14px;background:var(--red);color:white;font-weight:650;cursor:pointer}.btn:disabled{opacity:.55;cursor:wait}.btn.alt{background:#f1e7e6;color:var(--ink)}.btn.warn{background:#852e43}.toolbar{flex-wrap:wrap}.toolbar select{border:1px solid var(--line);border-radius:12px;background:white;padding:10px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.metric,.card{padding:18px}.metric b{display:block;font-size:27px;margin-top:4px}.section{margin-top:18px}.section h2{font-size:18px;margin-bottom:11px}.actions{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.action{text-align:left}.action small{display:block;font-weight:400;opacity:.82;margin-top:3px}.cols{display:grid;grid-template-columns:1.2fr .8fr;gap:15px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid var(--line);font-size:13px}th{color:var(--muted)}.status{display:inline-flex;align-items:center;gap:6px}.dot{width:8px;height:8px;border-radius:50%;background:var(--bad)}.success .dot{background:var(--ok)}.barrow{display:grid;grid-template-columns:minmax(95px,1fr) 2fr 42px;gap:9px;align-items:center;margin:9px 0}.barname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar{height:9px;background:#f1e7e6;border-radius:10px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--red),var(--red2))}.report,.result{white-space:pre-wrap;overflow:auto;border-radius:14px;padding:15px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}.report{max-height:410px;background:#2c2426;color:#fff8f5}.result{margin-top:11px;max-height:210px;background:#f7efed}.error{color:var(--bad);margin-top:12px}.hidden{display:none!important}@media(max-width:880px){.grid{grid-template-columns:repeat(2,1fr)}.cols{grid-template-columns:1fr}.actions{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.wrap{padding:16px 11px 40px}.top{align-items:flex-start;flex-direction:column}.actions{grid-template-columns:1fr}.field{flex-direction:column}.metric b{font-size:22px}}
 </style></head><body>
-<div id="login" class="login"><div class="brand"><div class="logo">S</div><div><h2>SweetGift Admin</h2><div class="sub">Аналитика и управление обработкой</div></div></div><p>Введите секрет ночного отчёта. Он останется только в этой вкладке.</p><form id="loginForm" class="field"><input id="secret" type="password" autocomplete="current-password" placeholder="Секрет доступа" required><button class="btn">Войти</button></form><div id="loginError" class="error"></div></div>
+<div id="login" class="login"><div class="brand"><div class="logo">S</div><div><h2>SweetGift Admin</h2><div class="sub">Аналитика и управление обработкой</div></div></div><p>Войдите под учётной записью администратора.</p><form id="loginForm"><div class="field"><input id="email" type="email" autocomplete="username" placeholder="Email" required></div><div class="field"><input id="password" type="password" autocomplete="current-password" placeholder="Пароль" required><button class="btn">Войти</button></div></form><div id="loginError" class="error"></div></div>
 <main id="app" class="wrap hidden"><header class="top"><div class="brand"><div class="logo">S</div><div><h1>SweetGift</h1><div class="sub">Заказы и ночная обработка</div></div></div><div class="toolbar"><select id="period"><option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">90 дней</option></select><button id="refresh" class="btn alt">Обновить</button><button id="logout" class="btn alt">Выйти</button></div></header>
 <section id="metrics" class="grid"></section>
 <section class="section"><h2>Управление pipeline</h2><div class="card"><div class="actions"><button class="btn action" data-action="products">Импорт товаров<small>YML и SEO-сущности</small></button><button class="btn action" data-action="articles">Импорт статей<small>Sitemap и индекс</small></button><button class="btn action" data-action="classify">Классификация<small>Темы и сущности</small></button><button class="btn warn action" data-action="report">Отправить отчёт<small>Письмо прямо сейчас</small></button></div><div id="actionResult" class="result hidden"></div></div></section>
@@ -196,19 +201,24 @@ const HTML = `<!doctype html><html lang="ru"><head>
 <section class="section cols"><div><h2>Популярные товары</h2><div id="products" class="card"></div></div><div><h2>Категории</h2><div id="categories" class="card"></div></div></section>
 <section class="section cols"><div><h2>Последние заказы</h2><div class="card"><table><thead><tr><th>Заказ</th><th>Дата</th><th>Позиций</th><th>Сумма</th></tr></thead><tbody id="orders"></tbody></table></div></div><div><h2>Ежедневный отчёт</h2><div id="report" class="report"></div></div></section>
 </main><script>
-const state={secret:sessionStorage.getItem("sg_admin_secret")||""},el=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),money=v=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:0}).format(Number(v)||0),date=v=>v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):"—";
-async function api(path,options={}){const base=location.pathname.replace(/\\/$/,"");const r=await fetch(base+"/"+path,{...options,headers:{...(options.headers||{}),"x-report-secret":state.secret,"content-type":"application/json"}}),b=await r.json();if(!r.ok)throw new Error(b.error||"Ошибка запроса");return b}
+const AUTH_URL="${SUPABASE_URL}/auth/v1",AUTH_KEY="${PUBLISHABLE_KEY}",state={session:JSON.parse(localStorage.getItem("sg_admin_session")||"null")},el=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),money=v=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:0}).format(Number(v)||0),date=v=>v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):"—";
+function saveSession(value){state.session=value;if(value)localStorage.setItem("sg_admin_session",JSON.stringify(value));else localStorage.removeItem("sg_admin_session")}
+async function authRequest(grant,body){const r=await fetch(AUTH_URL+"/token?grant_type="+grant,{method:"POST",headers:{"apikey":AUTH_KEY,"content-type":"application/json"},body:JSON.stringify(body)}),data=await r.json();if(!r.ok)throw new Error(data.error_description||data.msg||"Ошибка входа");data.expires_at=Math.floor(Date.now()/1000)+(data.expires_in||3600);saveSession(data);return data}
+async function ensureSession(){if(!state.session)throw new Error("Требуется вход");if((state.session.expires_at||0)>Math.floor(Date.now()/1000)+60)return state.session;return await authRequest("refresh_token",{refresh_token:state.session.refresh_token})}
+async function api(path,options={}){const session=await ensureSession(),base=location.pathname.replace(/\\/$/,"");const r=await fetch(base+"/"+path,{...options,headers:{...(options.headers||{}),"authorization":"Bearer "+session.access_token,"content-type":"application/json"}}),b=await r.json();if(!r.ok)throw new Error(b.error||"Ошибка запроса");return b}
 function bars(id,rows,key="name"){const max=Math.max(1,...rows.map(x=>+x.value||0));el(id).innerHTML=rows.length?rows.map(x=>'<div class="barrow"><div class="barname" title="'+esc(x[key])+'">'+esc(x[key])+'</div><div class="bar"><i style="width:'+Math.max(3,(+x.value||0)/max*100)+'%"></i></div><b>'+esc(x.value)+'</b></div>').join(""):'<div class="sub">Пока нет данных</div>'}
 function render(d){const o=d.orders;el("metrics").innerHTML=[["Заказы",o.total],["Выручка",money(o.revenue)],["Средний чек",money(o.average_check)],["Товаров продано",o.items],["Подарки",o.gifts],["С поздравлением",o.messages],["С промокодом",o.promocodes],["Каталог",d.catalog.products+" / "+d.catalog.articles]].map(x=>'<div class="metric card"><div class="sub">'+esc(x[0])+'</div><b>'+esc(x[1])+'</b></div>').join("");el("jobs").innerHTML=d.pipeline.map(j=>'<tr><td>'+esc(j.job_name)+'</td><td><span class="status '+(j.status==="success"?"success":"")+'"><i class="dot"></i>'+esc(j.status)+'</span></td><td>'+esc(j.processed_count)+'</td><td>'+date(j.finished_at||j.started_at)+'</td></tr>').join("");bars("daily",o.daily,"date");bars("products",o.top_products);bars("categories",o.top_categories);el("orders").innerHTML=o.recent.length?o.recent.map(x=>'<tr><td>…'+esc(x.order_id)+'</td><td>'+date(x.created_at)+'</td><td>'+esc(x.items)+'</td><td>'+money(x.total)+'</td></tr>').join(""):'<tr><td colspan="4" class="sub">Заказов за период нет</td></tr>';el("report").textContent=d.report}
 async function load(){el("refresh").disabled=true;try{render(await api("api/dashboard?days="+el("period").value));el("login").classList.add("hidden");el("app").classList.remove("hidden")}finally{el("refresh").disabled=false}}
-el("loginForm").addEventListener("submit",async e=>{e.preventDefault();state.secret=el("secret").value;el("loginError").textContent="";try{await load();sessionStorage.setItem("sg_admin_secret",state.secret)}catch(x){state.secret="";el("loginError").textContent=x.message}});el("refresh").onclick=()=>load().catch(x=>alert(x.message));el("period").onchange=()=>load().catch(x=>alert(x.message));el("logout").onclick=()=>{sessionStorage.removeItem("sg_admin_secret");location.reload()};
-document.querySelectorAll("[data-action]").forEach(b=>b.onclick=async()=>{const action=b.dataset.action;if(action==="report"&&!confirm("Отправить отчёт на почту сейчас?"))return;if(!confirm("Запустить «"+b.firstChild.textContent.trim()+"»?"))return;b.disabled=true;const box=el("actionResult");box.classList.remove("hidden");box.textContent="Выполняется…";try{const r=await api("api/run",{method:"POST",body:JSON.stringify({action})});box.textContent=JSON.stringify(r,null,2);await load()}catch(x){box.textContent="Ошибка: "+x.message}finally{b.disabled=false}});if(state.secret)load().catch(()=>{sessionStorage.removeItem("sg_admin_secret");state.secret=""});
+el("loginForm").addEventListener("submit",async e=>{e.preventDefault();el("loginError").textContent="";try{await authRequest("password",{email:el("email").value,password:el("password").value});await load()}catch(x){saveSession(null);el("loginError").textContent=x.message}});el("refresh").onclick=()=>load().catch(x=>alert(x.message));el("period").onchange=()=>load().catch(x=>alert(x.message));el("logout").onclick=()=>{saveSession(null);location.reload()};
+document.querySelectorAll("[data-action]").forEach(b=>b.onclick=async()=>{const action=b.dataset.action;if(action==="report"&&!confirm("Отправить отчёт на почту сейчас?"))return;if(!confirm("Запустить «"+b.firstChild.textContent.trim()+"»?"))return;b.disabled=true;const box=el("actionResult");box.classList.remove("hidden");box.textContent="Выполняется…";try{const r=await api("api/run",{method:"POST",body:JSON.stringify({action})});box.textContent=JSON.stringify(r,null,2);await load()}catch(x){box.textContent="Ошибка: "+x.message}finally{b.disabled=false}});if(state.session)load().catch(()=>saveSession(null));
 </script></body></html>`;
 
 Deno.serve(async (req) => {
   const url = new URL(req.url);
   if (url.pathname.endsWith("/api/dashboard")) {
-    if (!authorized(req)) return json({ ok: false, error: "Неверный секрет" }, 401);
+    if (!await authorized(req)) {
+      return json({ ok: false, error: "Нет доступа администратора" }, 401);
+    }
     const days = Math.min(
       90,
       Math.max(1, Number(url.searchParams.get("days")) || 30),
@@ -223,7 +233,9 @@ Deno.serve(async (req) => {
     }
   }
   if (url.pathname.endsWith("/api/run") && req.method === "POST") {
-    if (!authorized(req)) return json({ ok: false, error: "Неверный секрет" }, 401);
+    if (!await authorized(req)) {
+      return json({ ok: false, error: "Нет доступа администратора" }, 401);
+    }
     try {
       const body = await req.json();
       return await runAction(String(body?.action || ""));
@@ -239,7 +251,7 @@ Deno.serve(async (req) => {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
       "content-security-policy":
-        "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-ancestors https://sweetgift.ru https://www.sweetgift.ru",
+        "default-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self' https://rvgvbxipccbkytmhltmi.supabase.co; frame-ancestors https://sweetgift.ru https://www.sweetgift.ru",
       "x-content-type-options": "nosniff",
       "referrer-policy": "no-referrer",
     },
