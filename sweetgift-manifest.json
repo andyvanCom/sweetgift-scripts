@@ -98,6 +98,13 @@
       "src": "sweetgift-product-top-lists.js",
       "version": "1",
       "pages": ["all"]
+    },
+    {
+      "name": "gift-selector",
+      "enabled": true,
+      "src": "sweetgift-gift-selector.js",
+      "version": "1",
+      "pages": ["/podbor-po-sostavu", "/podbor-po-sostavu/"]
     }
   ]
 }
