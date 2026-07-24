@@ -13,6 +13,8 @@ filters and sorts products locally without additional network requests.
 
   var ROOT_SELECTOR = '[data-sg-gift-selector], #sg-gift-selector';
   var SEARCH_THRESHOLD = 30;
+  var REQUEST_URL =
+    'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-request';
   var INGREDIENT_ALIASES = {
     'с икрой': 'икра',
     'икрой': 'икра',
@@ -125,10 +127,26 @@ filters and sorts products locally without additional network requests.
       '.sg-selector-price{margin-top:auto;padding-top:13px;font-size:18px;font-weight:750;}',
       '.sg-selector-more{display:block;margin-top:12px;border-radius:12px;background:var(--sg-red);padding:10px 13px;color:#fff;text-align:center;font-size:14px;font-weight:700;}',
       '.sg-selector-empty,.sg-selector-status{grid-column:1/-1;padding:45px 18px;border:1px dashed var(--sg-line);border-radius:18px;text-align:center;color:var(--sg-muted);}',
+      '.sg-selector-request{grid-column:1/-1;max-width:760px;margin:0 auto;padding:25px;border:1px solid var(--sg-line);border-radius:22px;background:#fffaf8;box-shadow:0 12px 34px rgba(67,32,41,.07);}',
+      '.sg-selector-request-title{margin:0;font-size:24px;line-height:1.25;}',
+      '.sg-selector-request-text{margin:10px 0 20px;color:var(--sg-muted);line-height:1.5;}',
+      '.sg-selector-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}',
+      '.sg-selector-field{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:650;}',
+      '.sg-selector-field input{width:100%;height:48px;border:1px solid var(--sg-line);border-radius:13px;background:#fff;padding:0 14px;color:var(--sg-ink);font:400 16px/1.2 inherit;outline:none;}',
+      '.sg-selector-field input:focus{border-color:var(--sg-red);box-shadow:0 0 0 3px rgba(169,40,77,.12);}',
+      '.sg-selector-consent{display:flex;align-items:flex-start;gap:9px;margin:17px 0;color:var(--sg-muted);font-size:13px;line-height:1.4;cursor:pointer;}',
+      '.sg-selector-consent input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--sg-red);flex:0 0 auto;}',
+      '.sg-selector-submit{appearance:none;width:100%;min-height:48px;border:0;border-radius:13px;background:var(--sg-red);padding:12px 18px;color:#fff;font:700 15px/1.2 inherit;cursor:pointer;transition:background .2s,transform .2s;}',
+      '.sg-selector-submit:hover{background:var(--sg-red-dark);transform:translateY(-1px);}',
+      '.sg-selector-submit:disabled{opacity:.6;cursor:wait;transform:none;}',
+      '.sg-selector-form-status{min-height:20px;margin-top:12px;font-size:14px;}',
+      '.sg-selector-form-status.is-error{color:#b42318;}',
+      '.sg-selector-request-success{grid-column:1/-1;padding:35px 20px;border:1px solid #b7dfc8;border-radius:18px;background:#f1fbf5;text-align:center;color:#196b3a;font-size:17px;font-weight:650;}',
+      '.sg-selector-hp{position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important;overflow:hidden!important;}',
       '.sg-selector-status{margin-top:18px;}',
       '@media(max-width:980px){.sg-selector-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}',
       '@media(max-width:720px){.sg-selector{padding:25px 14px 50px;}.sg-selector-panel{padding:17px;border-radius:18px;}.sg-selector-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}.sg-selector-card{border-radius:16px;}.sg-selector-body{padding:12px;}.sg-selector-name{font-size:14px;}.sg-selector-composition{font-size:12px;-webkit-line-clamp:2;}.sg-selector-price{font-size:16px;}}',
-      '@media(max-width:560px){.sg-selector-toolbar{align-items:flex-start;flex-direction:column;}.sg-selector-actions{width:100%;justify-content:space-between;}.sg-selector-share .sg-share-menu{right:auto;left:0;}.sg-selector-share .sg-share-main{padding:0 14px;}}',
+      '@media(max-width:560px){.sg-selector-toolbar{align-items:flex-start;flex-direction:column;}.sg-selector-actions{width:100%;justify-content:space-between;}.sg-selector-share .sg-share-menu{right:auto;left:0;}.sg-selector-share .sg-share-main{padding:0 14px;}.sg-selector-request{padding:19px 15px;border-radius:18px;}.sg-selector-form-grid{grid-template-columns:1fr;}.sg-selector-request-title{font-size:21px;}}',
       '@media(max-width:420px){.sg-selector-chip{padding:9px 12px;font-size:13px;}}'
     ].join('');
 
@@ -369,7 +387,23 @@ filters and sorts products locally without additional network requests.
 
         if (!results.length) {
           grid.innerHTML =
-            '<div class="sg-selector-empty">Корзин с таким сочетанием пока нет. Снимите один из ингредиентов и попробуйте снова.</div>';
+            '<section class="sg-selector-request">' +
+              '<h2 class="sg-selector-request-title">Вам нужны корзины с таким составом?</h2>' +
+              '<p class="sg-selector-request-text">Готовых корзин с выбранным сочетанием пока нет. Отправьте запрос — мы проверим возможность изготовления и свяжемся с вами.</p>' +
+              '<form class="sg-selector-request-form">' +
+                '<div class="sg-selector-form-grid">' +
+                  '<label class="sg-selector-field">Количество корзин<input name="quantity" type="number" min="1" max="10000" step="1" inputmode="numeric" required placeholder="Например, 10"></label>' +
+                  '<label class="sg-selector-field">Бюджет на каждую, ₽<input name="budget" type="number" min="500" max="10000000" step="100" inputmode="numeric" required placeholder="Например, 7000"></label>' +
+                  '<label class="sg-selector-field">Ваше имя<input name="name" type="text" minlength="2" maxlength="100" autocomplete="name" required placeholder="Как к вам обращаться"></label>' +
+                  '<label class="sg-selector-field">Телефон<input name="phone" type="tel" minlength="7" maxlength="40" autocomplete="tel" required placeholder="+7 900 000-00-00"></label>' +
+                  '<label class="sg-selector-field">Email<input name="email" type="email" maxlength="160" autocomplete="email" required placeholder="mail@example.ru"></label>' +
+                  '<input class="sg-selector-hp" name="company" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">' +
+                '</div>' +
+                '<label class="sg-selector-consent"><input name="consent" type="checkbox" required><span>Я согласен на обработку указанных данных для ответа на запрос.</span></label>' +
+                '<button class="sg-selector-submit" type="submit">Отправить запрос</button>' +
+                '<div class="sg-selector-form-status" aria-live="polite"></div>' +
+              '</form>' +
+            '</section>';
           return;
         }
 
@@ -433,6 +467,56 @@ filters and sorts products locally without additional network requests.
           renderChips();
         });
       }
+
+      grid.addEventListener('submit', function (event) {
+        var form = event.target.closest('.sg-selector-request-form');
+        if (!form) return;
+        event.preventDefault();
+
+        if (!form.reportValidity()) return;
+
+        var submit = form.querySelector('.sg-selector-submit');
+        var status = form.querySelector('.sg-selector-form-status');
+        var values = new FormData(form);
+
+        submit.disabled = true;
+        submit.textContent = 'Отправляем…';
+        status.className = 'sg-selector-form-status';
+        status.textContent = '';
+
+        fetch(REQUEST_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ingredients: selected.slice(),
+            quantity: Number(values.get('quantity')),
+            budget: Number(values.get('budget')),
+            name: String(values.get('name') || ''),
+            phone: String(values.get('phone') || ''),
+            email: String(values.get('email') || ''),
+            company: String(values.get('company') || ''),
+            consent: values.get('consent') === 'on',
+            page_url: window.location.href
+          })
+        }).then(function (response) {
+          return response.json().catch(function () {
+            return {};
+          }).then(function (data) {
+            if (!response.ok || !data.ok) {
+              throw new Error(data.error || 'Не удалось отправить запрос');
+            }
+          });
+        }).then(function () {
+          grid.innerHTML =
+            '<div class="sg-selector-request-success">Спасибо! Запрос отправлен. Мы свяжемся с вами по указанным контактам.</div>';
+        }).catch(function (error) {
+          status.className = 'sg-selector-form-status is-error';
+          status.textContent = error.message ||
+            'Не удалось отправить запрос. Попробуйте позднее.';
+          submit.disabled = false;
+          submit.textContent = 'Отправить запрос';
+        });
+      });
 
       ensureShareButton();
       render();
