@@ -33,7 +33,7 @@
       "name": "product-badges",
       "enabled": true,
       "src": "sweetgift-product-badges.js",
-      "version": "3",
+      "version": "4",
       "pages": ["all"]
     },
     {

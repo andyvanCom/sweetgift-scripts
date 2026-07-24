@@ -142,7 +142,6 @@ filters and sorts products locally without additional network requests.
       '.sg-selector-form-status{min-height:20px;margin-top:12px;font-size:14px;}',
       '.sg-selector-form-status.is-error{color:#b42318;}',
       '.sg-selector-request-success{grid-column:1/-1;padding:35px 20px;border:1px solid #b7dfc8;border-radius:18px;background:#f1fbf5;text-align:center;color:#196b3a;font-size:17px;font-weight:650;}',
-      '.sg-selector-hp{position:absolute!important;left:-9999px!important;width:1px!important;height:1px!important;overflow:hidden!important;}',
       '.sg-selector-status{margin-top:18px;}',
       '@media(max-width:980px){.sg-selector-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}',
       '@media(max-width:720px){.sg-selector{padding:25px 14px 50px;}.sg-selector-panel{padding:17px;border-radius:18px;}.sg-selector-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}.sg-selector-card{border-radius:16px;}.sg-selector-body{padding:12px;}.sg-selector-name{font-size:14px;}.sg-selector-composition{font-size:12px;-webkit-line-clamp:2;}.sg-selector-price{font-size:16px;}}',
@@ -397,7 +396,6 @@ filters and sorts products locally without additional network requests.
                   '<label class="sg-selector-field">Ваше имя<input name="name" type="text" minlength="2" maxlength="100" autocomplete="name" required placeholder="Как к вам обращаться"></label>' +
                   '<label class="sg-selector-field">Телефон<input name="phone" type="tel" minlength="7" maxlength="40" autocomplete="tel" required placeholder="+7 900 000-00-00"></label>' +
                   '<label class="sg-selector-field">Email<input name="email" type="email" maxlength="160" autocomplete="email" required placeholder="mail@example.ru"></label>' +
-                  '<input class="sg-selector-hp" name="company" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">' +
                 '</div>' +
                 '<label class="sg-selector-consent"><input name="consent" type="checkbox" required><span>Я согласен на обработку указанных данных для ответа на запрос.</span></label>' +
                 '<button class="sg-selector-submit" type="submit">Отправить запрос</button>' +
@@ -494,7 +492,6 @@ filters and sorts products locally without additional network requests.
             name: String(values.get('name') || ''),
             phone: String(values.get('phone') || ''),
             email: String(values.get('email') || ''),
-            company: String(values.get('company') || ''),
             consent: values.get('consent') === 'on',
             page_url: window.location.href
           })
@@ -505,10 +502,16 @@ filters and sorts products locally without additional network requests.
             if (!response.ok || !data.ok) {
               throw new Error(data.error || 'Не удалось отправить запрос');
             }
+            return data;
           });
-        }).then(function () {
+        }).then(function (data) {
+          var requestId = data && data.request_id
+            ? ' Номер запроса: ' + escapeHtml(data.request_id) + '.'
+            : '';
           grid.innerHTML =
-            '<div class="sg-selector-request-success">Спасибо! Запрос отправлен. Мы свяжемся с вами по указанным контактам.</div>';
+            '<div class="sg-selector-request-success">Спасибо! Запрос отправлен.' +
+              requestId +
+              ' Мы свяжемся с вами по указанным контактам.</div>';
         }).catch(function (error) {
           status.className = 'sg-selector-form-status is-error';
           status.textContent = error.message ||

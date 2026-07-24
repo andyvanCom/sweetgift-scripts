@@ -100,21 +100,8 @@ Deno.serve(async (req) => {
     return response({ ok: false, error: "Слишком большой запрос" }, 413, allowedOrigin);
   }
 
-  if (rateLimited(req)) {
-    return response(
-      { ok: false, error: "Слишком много запросов. Попробуйте позднее." },
-      429,
-      allowedOrigin,
-    );
-  }
-
   try {
     const body = await req.json();
-
-    // Hidden field: real users never fill it.
-    if (clean(body.company, 100)) {
-      return response({ ok: true }, 200, allowedOrigin);
-    }
 
     const name = clean(body.name, 100);
     const phone = clean(body.phone, 40);
@@ -160,15 +147,28 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Count only fully valid submissions. Validation errors and browser
+    // autofill must never consume the user's request allowance.
+    if (rateLimited(req)) {
+      return response(
+        { ok: false, error: "Слишком много запросов. Попробуйте через 10 минут." },
+        429,
+        allowedOrigin,
+      );
+    }
+
+    const requestId = crypto.randomUUID().split("-")[0].toUpperCase();
     // Denomailer/Q-encoding is rendered literally by some Gmail clients when
     // the subject contains Cyrillic. Keep the header ASCII-only; all Russian
     // request details remain in the UTF-8 HTML body.
-    const subject = `SweetGift custom basket request - ${quantity} pcs`;
+    const subject =
+      `SweetGift custom basket request ${requestId} - ${quantity} pcs`;
     const html = `
       <meta charset="UTF-8">
       <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.55;color:#222;">
         <div style="max-width:720px;margin:0 auto;padding:24px;">
           <h2 style="margin:0 0 18px;">Новый запрос с подбора по составу</h2>
+          <p style="margin:0 0 18px;color:#666;">Номер запроса: <b>${requestId}</b></p>
           <table style="width:100%;border-collapse:collapse;">
             <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Состав</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${escapeHtml(ingredients.join(", "))}</td></tr>
             <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Количество</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${quantity} шт.</td></tr>
@@ -205,7 +205,14 @@ Deno.serve(async (req) => {
       await client.close();
     }
 
-    return response({ ok: true }, 200, allowedOrigin);
+    console.log("gift-selector-request sent", {
+      request_id: requestId,
+      ingredients_count: ingredients.length,
+      quantity,
+      recipient: REQUEST_TO_EMAIL,
+    });
+
+    return response({ ok: true, request_id: requestId }, 200, allowedOrigin);
   } catch (error) {
     console.error("gift-selector-request", error);
     return response(
