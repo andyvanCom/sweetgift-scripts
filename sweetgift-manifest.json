@@ -33,7 +33,7 @@
       "name": "product-badges",
       "enabled": true,
       "src": "sweetgift-product-badges.js",
-      "version": "4",
+      "version": "3",
       "pages": ["all"]
     },
     {
@@ -103,7 +103,7 @@
       "name": "gift-selector",
       "enabled": true,
       "src": "sweetgift-gift-selector.js",
-      "version": "3",
+      "version": "4",
       "pages": ["/podbor-po-sostavu", "/podbor-po-sostavu/"]
     }
   ]
