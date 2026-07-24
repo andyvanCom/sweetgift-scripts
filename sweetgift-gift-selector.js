@@ -132,8 +132,11 @@ filters and sorts products locally without additional network requests.
       '.sg-selector-request-text{margin:10px 0 20px;color:var(--sg-muted);line-height:1.5;}',
       '.sg-selector-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}',
       '.sg-selector-field{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:650;}',
-      '.sg-selector-field input{width:100%;height:48px;border:1px solid var(--sg-line);border-radius:13px;background:#fff;padding:0 14px;color:var(--sg-ink);font:400 16px/1.2 inherit;outline:none;}',
-      '.sg-selector-field input:focus{border-color:var(--sg-red);box-shadow:0 0 0 3px rgba(169,40,77,.12);}',
+      '.sg-selector-field-wide{grid-column:1/-1;}',
+      '.sg-selector-field input,.sg-selector-field textarea{width:100%;border:1px solid var(--sg-line);border-radius:13px;background:#fff;padding:0 14px;color:var(--sg-ink);font:400 16px/1.35 inherit;outline:none;}',
+      '.sg-selector-field input{height:48px;}',
+      '.sg-selector-field textarea{min-height:108px;padding-top:12px;padding-bottom:12px;resize:vertical;}',
+      '.sg-selector-field input:focus,.sg-selector-field textarea:focus{border-color:var(--sg-red);box-shadow:0 0 0 3px rgba(169,40,77,.12);}',
       '.sg-selector-consent{display:flex;align-items:flex-start;gap:9px;margin:17px 0;color:var(--sg-muted);font-size:13px;line-height:1.4;cursor:pointer;}',
       '.sg-selector-consent input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--sg-red);flex:0 0 auto;}',
       '.sg-selector-submit{appearance:none;width:100%;min-height:48px;border:0;border-radius:13px;background:var(--sg-red);padding:12px 18px;color:#fff;font:700 15px/1.2 inherit;cursor:pointer;transition:background .2s,transform .2s;}',
@@ -396,6 +399,7 @@ filters and sorts products locally without additional network requests.
                   '<label class="sg-selector-field">Ваше имя<input name="name" type="text" minlength="2" maxlength="100" autocomplete="name" required placeholder="Как к вам обращаться"></label>' +
                   '<label class="sg-selector-field">Телефон<input name="phone" type="tel" minlength="7" maxlength="40" autocomplete="tel" required placeholder="+7 900 000-00-00"></label>' +
                   '<label class="sg-selector-field">Email<input name="email" type="email" maxlength="160" autocomplete="email" required placeholder="mail@example.ru"></label>' +
+                  '<label class="sg-selector-field sg-selector-field-wide">Комментарий <span style="font-weight:400;color:var(--sg-muted);">(необязательно)</span><textarea name="comment" maxlength="2000" placeholder="Например: фирменные цвета, срок изготовления, пожелания по упаковке или продуктам"></textarea></label>' +
                 '</div>' +
                 '<label class="sg-selector-consent"><input name="consent" type="checkbox" required><span>Я согласен на обработку указанных данных для ответа на запрос.</span></label>' +
                 '<button class="sg-selector-submit" type="submit">Отправить запрос</button>' +
@@ -492,6 +496,7 @@ filters and sorts products locally without additional network requests.
             name: String(values.get('name') || ''),
             phone: String(values.get('phone') || ''),
             email: String(values.get('email') || ''),
+            comment: String(values.get('comment') || ''),
             consent: values.get('consent') === 'on',
             page_url: window.location.href
           })

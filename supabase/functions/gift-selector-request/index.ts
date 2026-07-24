@@ -106,6 +106,7 @@ Deno.serve(async (req) => {
     const name = clean(body.name, 100);
     const phone = clean(body.phone, 40);
     const email = clean(body.email, 160).toLowerCase();
+    const comment = clean(body.comment, 2000);
     const quantity = Number(body.quantity);
     const budget = Number(body.budget);
     const pageUrl = clean(body.page_url, 500);
@@ -135,6 +136,12 @@ Deno.serve(async (req) => {
       errors.push("Бюджет должен быть от 500 до 10 000 000 рублей");
     }
     if (!ingredients.length) errors.push("Не выбраны ингредиенты");
+    if (
+      pageUrl &&
+      !/^https:\/\/(www\.)?sweetgift\.ru(?:\/|$)/i.test(pageUrl)
+    ) {
+      errors.push("Некорректная страница подбора");
+    }
     if (body.consent !== true) {
       errors.push("Нужно согласие на обработку данных");
     }
@@ -170,13 +177,14 @@ Deno.serve(async (req) => {
           <h2 style="margin:0 0 18px;">Новый запрос с подбора по составу</h2>
           <p style="margin:0 0 18px;color:#666;">Номер запроса: <b>${requestId}</b></p>
           <table style="width:100%;border-collapse:collapse;">
-            <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Состав</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${escapeHtml(ingredients.join(", "))}</td></tr>
+            <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Обязательные ингредиенты</b><br><span style="font-size:13px;color:#777;">Клиенту важно, чтобы они были в составе каждой корзины</span></td><td style="padding:8px;border-bottom:1px solid #eee;">${escapeHtml(ingredients.join(", "))}</td></tr>
             <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Количество</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${quantity} шт.</td></tr>
             <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Бюджет на одну</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${budget.toLocaleString("ru-RU")} ₽</td></tr>
+            <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Комментарий клиента</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${comment ? escapeHtml(comment) : "—"}</td></tr>
             <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Имя</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${escapeHtml(name)}</td></tr>
             <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Телефон</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${escapeHtml(phone)}</td></tr>
             <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Email</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${escapeHtml(email)}</td></tr>
-            <tr><td style="padding:8px;"><b>Страница</b></td><td style="padding:8px;">${escapeHtml(pageUrl)}</td></tr>
+            <tr><td style="padding:8px;"><b>Страница</b></td><td style="padding:8px;">${pageUrl ? `<a href="${escapeHtml(pageUrl)}">Открыть выбранный состав</a>` : "—"}</td></tr>
           </table>
         </div>
       </div>
