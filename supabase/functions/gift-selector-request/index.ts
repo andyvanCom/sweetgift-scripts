@@ -160,8 +160,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    const subject =
-      `Запрос корзин по составу: ${ingredients.join(", ")} — ${quantity} шт.`;
+    // Denomailer/Q-encoding is rendered literally by some Gmail clients when
+    // the subject contains Cyrillic. Keep the header ASCII-only; all Russian
+    // request details remain in the UTF-8 HTML body.
+    const subject = `SweetGift custom basket request - ${quantity} pcs`;
     const html = `
       <meta charset="UTF-8">
       <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.55;color:#222;">
