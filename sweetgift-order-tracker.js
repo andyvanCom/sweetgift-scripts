@@ -13,6 +13,7 @@ SweetGift.ru | Anonymous Order Tracker
   var RPC_NAME = 'track_product_order';
   var STORAGE_PREFIX = 'sg_order_tracked_';
   var pending = {};
+  var snapshots = typeof WeakMap === 'function' ? new WeakMap() : null;
 
   window.SG = window.SG || {};
   window.SG.orderTracker = window.SG.orderTracker || {};
@@ -137,9 +138,10 @@ SweetGift.ru | Anonymous Order Tracker
   }
 
   function orderId(cart, form) {
-    var value = firstValue(window.tildaForm || {}, ['orderIdForStat', 'orderid', 'orderId']) ||
+    var value = firstValue(form, ['tildaOrderId', 'tildaTranId']) ||
+      firstValue(window.tildaForm || {}, ['orderIdForStat', 'orderid', 'orderId']) ||
       firstValue(cart, ['orderid', 'orderId', 'order_id', 'id']) ||
-      fieldValue(form, ['orderid', 'orderId', 'order_id', 'tranid']);
+      fieldValue(form, ['orderid', 'orderId', 'order_id', 'tranid', 'orderid_hidden']);
 
     if (value) return cleanText(value, 160);
 
@@ -174,6 +176,19 @@ SweetGift.ru | Anonymous Order Tracker
     var discount = number(firstValue(cart, ['discount', 'discountvalue', 'discountValue']));
     var subtotal = number(firstValue(cart, ['prodamount', 'subtotal', 'productsAmount']));
     var orderTotal = number(firstValue(cart, ['amount', 'total', 'orderTotal']));
+    var promocode = fieldValue(form, [
+      'Промокод',
+      'promocode',
+      'PromoCode',
+      'promoCode',
+      'promo'
+    ]) || firstValue(cart, [
+      'promocode',
+      'promoCode',
+      'promocodevalue',
+      'promocodeValue',
+      'promo'
+    ]);
 
     return {
       order_id: orderId(cart, form),
@@ -183,12 +198,22 @@ SweetGift.ru | Anonymous Order Tracker
       discount: discount,
       is_gift: boolFromChoice(samSebe, /подар|друг|получател/, /себе|сам/),
       samsebe: samSebe,
-      delivery_date: cleanText(fieldValue(form, ['delivery-date', 'DeliveryDate', 'delivery_date']), 80),
-      delivery_interval: cleanText(fieldValue(form, ['delivery-interval', 'DeliveryInterval', 'delivery_interval']), 100),
+      delivery_date: cleanText(fieldValue(form, [
+        'Дата_доставки_2',
+        'delivery-date',
+        'DeliveryDate',
+        'delivery_date'
+      ]), 80),
+      delivery_interval: cleanText(fieldValue(form, [
+        'ВРЕМЯ',
+        'delivery-interval',
+        'DeliveryInterval',
+        'delivery_interval'
+      ]), 100),
       delivery_type: cleanText(fieldValue(form, ['delivery', 'Delivery', 'delivery_type']), 160),
       delivery_price: number(firstValue(cart, ['delivery', 'deliveryPrice', 'delivery_price'])),
       payment_system: cleanText(fieldValue(form, ['paymentsystem', 'PaymentSystem']), 100),
-      promocode: cleanText(fieldValue(form, ['promocode', 'PromoCode']), 100),
+      promocode: cleanText(promocode, 100),
       client_type: cleanText(fieldValue(form, ['ClientType', 'client_type']), 100),
       freecard: freeCard,
       has_message: Boolean(message && String(message).trim()),
@@ -255,8 +280,11 @@ SweetGift.ru | Anonymous Order Tracker
       },
       function (error) {
         delete pending[id];
-        if ((attempt || 0) < 1) {
-          setTimeout(function () { send(payload, 1); }, 1000);
+        if ((attempt || 0) < 5) {
+          var nextAttempt = (attempt || 0) + 1;
+          setTimeout(function () {
+            send(payload, nextAttempt);
+          }, Math.min(8000, 500 * Math.pow(2, nextAttempt)));
         } else {
           console.warn('[SG Order Tracker] RPC error:', error);
         }
@@ -272,15 +300,38 @@ SweetGift.ru | Anonymous Order Tracker
     ));
   }
 
+  document.addEventListener('submit', function (event) {
+    var form = event.target && event.target.tagName === 'FORM' ? event.target : null;
+    if (!isCartForm(form)) return;
+
+    var snapshot = copyCart();
+    if (snapshots) {
+      snapshots.set(form, snapshot);
+    } else {
+      form.__sgOrderCartSnapshot = snapshot;
+    }
+  }, true);
+
   document.addEventListener('tildaform:aftersuccess', function (event) {
     var form = event.target && event.target.tagName === 'FORM' ? event.target :
       (event.target && event.target.closest ? event.target.closest('form') : null);
 
     if (!isCartForm(form)) return;
 
-    var cartSnapshot = copyCart();
+    var cartSnapshot = snapshots
+      ? snapshots.get(form)
+      : form.__sgOrderCartSnapshot;
+    if (!cartSnapshot || !cartProducts(cartSnapshot).length) {
+      cartSnapshot = copyCart();
+    }
     var payload = buildPayload(form, cartSnapshot);
     send(payload, 0);
+
+    if (snapshots) {
+      snapshots.delete(form);
+    } else {
+      delete form.__sgOrderCartSnapshot;
+    }
   });
 
   tracker.inspect = function (form) {
