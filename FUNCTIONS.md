@@ -393,9 +393,9 @@ RPC `get_gift_box_selector_catalog` для отдельной страницы:
 /podbor-naborov-po-sostavu
 ```
 
-В неё входят разделы `novogodnie-nabory`, `ng-gift-box`, `gift-nabor`,
-`box-s-lomom`, `korzina-s-konyakom-v-podarok-muzhchine` и
-`korziny-s-vodkoy`.
+В неё входят только разделы `novogodnie-nabory`, `ng-gift-box`,
+`gift-nabor` и `box-s-lomom`. Разделы подарочных корзин не включаются,
+даже если товары в них имеют похожий состав.
 
 Новые разделы, в slug которых есть `nabor`, `gift-box` или префикс `box-`,
 подхватываются автоматически.

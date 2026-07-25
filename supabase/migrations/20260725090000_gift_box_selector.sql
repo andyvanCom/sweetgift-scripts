@@ -28,9 +28,7 @@ as $$
             'novogodnie-nabory',
             'ng-gift-box',
             'gift-nabor',
-            'box-s-lomom',
-            'korzina-s-konyakom-v-podarok-muzhchine',
-            'korziny-s-vodkoy'
+            'box-s-lomom'
           )
           or lower(coalesce(p.category_slug, '')) like '%nabor%'
           or lower(coalesce(p.category_slug, '')) like '%gift-box%'
