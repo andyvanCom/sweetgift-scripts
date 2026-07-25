@@ -4,6 +4,18 @@
 
 ---
 
+# 2026-07-25
+
+## Boxed gift selector
+
+- существующий подборщик по составу переиспользован для отдельной страницы подарочных наборов;
+- в выборку входят разделы `novogodnie-nabory`, `ng-gift-box`, `gift-nabor`,
+  `box-s-lomom`, а также новые алкогольные разделы
+  `korzina-s-konyakom-v-podarok-muzhchine` и `korziny-s-vodkoy`;
+- добавлен RPC `get_gift_box_selector_catalog`, клиентские тексты, URL-параметры, системная кнопка «Поделиться» и форма запроса для наборов.
+
+---
+
 # 2026-07-24
 
 ## Gift selector

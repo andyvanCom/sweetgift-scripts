@@ -386,6 +386,20 @@ Frontend получает уже готовый блок.
 /podbor-po-sostavu
 ```
 
+Общая внутренняя функция `get_gift_selector_catalog_for` также используется
+RPC `get_gift_box_selector_catalog` для отдельной страницы:
+
+```text
+/podbor-naborov-po-sostavu
+```
+
+В неё входят разделы `novogodnie-nabory`, `ng-gift-box`, `gift-nabor`,
+`box-s-lomom`, `korzina-s-konyakom-v-podarok-muzhchine` и
+`korziny-s-vodkoy`.
+
+Новые разделы, в slug которых есть `nabor`, `gift-box` или префикс `box-`,
+подхватываются автоматически.
+
 ### Источники
 
 - `products_catalog`;

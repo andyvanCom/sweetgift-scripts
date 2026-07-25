@@ -110,6 +110,10 @@ Deno.serve(async (req) => {
     const quantity = Number(body.quantity);
     const budget = Number(body.budget);
     const pageUrl = clean(body.page_url, 500);
+    const requestType = body.request_type === "gift_box" ? "gift_box" : "basket";
+    const itemLabel = requestType === "gift_box" ? "набор" : "корзина";
+    const eachItemLabel =
+      requestType === "gift_box" ? "каждого подарочного набора" : "каждой корзины";
     const ingredients = Array.isArray(body.ingredients)
       ? Array.from(
         new Set(
@@ -169,7 +173,7 @@ Deno.serve(async (req) => {
     // the subject contains Cyrillic. Keep the header ASCII-only; all Russian
     // request details remain in the UTF-8 HTML body.
     const subject =
-      `SweetGift custom basket request ${requestId} - ${quantity} pcs`;
+      `SweetGift custom ${requestType === "gift_box" ? "gift set" : "basket"} request ${requestId} - ${quantity} pcs`;
     const html = `
       <meta charset="UTF-8">
       <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.55;color:#222;">
@@ -177,7 +181,8 @@ Deno.serve(async (req) => {
           <h2 style="margin:0 0 18px;">Новый запрос с подбора по составу</h2>
           <p style="margin:0 0 18px;color:#666;">Номер запроса: <b>${requestId}</b></p>
           <table style="width:100%;border-collapse:collapse;">
-            <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Обязательные ингредиенты</b><br><span style="font-size:13px;color:#777;">Клиенту важно, чтобы они были в составе каждой корзины</span></td><td style="padding:8px;border-bottom:1px solid #eee;">${escapeHtml(ingredients.join(", "))}</td></tr>
+            <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Тип запроса</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${requestType === "gift_box" ? "Подарочный набор в коробке или ящике" : "Подарочная корзина"}</td></tr>
+            <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Обязательные ингредиенты</b><br><span style="font-size:13px;color:#777;">Клиенту важно, чтобы они были в составе ${eachItemLabel}</span></td><td style="padding:8px;border-bottom:1px solid #eee;">${escapeHtml(ingredients.join(", "))}</td></tr>
             <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Количество</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${quantity} шт.</td></tr>
             <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Бюджет на одну</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${budget.toLocaleString("ru-RU")} ₽</td></tr>
             <tr><td style="padding:8px;border-bottom:1px solid #eee;"><b>Комментарий клиента</b></td><td style="padding:8px;border-bottom:1px solid #eee;">${comment ? escapeHtml(comment) : "—"}</td></tr>
@@ -217,6 +222,7 @@ Deno.serve(async (req) => {
       request_id: requestId,
       ingredients_count: ingredients.length,
       quantity,
+      item_type: itemLabel,
       recipient: REQUEST_TO_EMAIL,
     });
 

@@ -2,8 +2,8 @@
 ===========================================================================
 SweetGift.ru | Gift Selector by Ingredients
 ---------------------------------------------------------------------------
-Client-side selector for /podbor-po-sostavu.
-Loads the existing catalog once through get_gift_selector_catalog, then
+Client-side selector for basket and boxed gift-set pages.
+Loads the relevant catalog once through an existing RPC, then
 filters and sorts products locally without additional network requests.
 ===========================================================================
 */
@@ -24,13 +24,41 @@ filters and sorts products locally without additional network requests.
   };
 
   window.SG = window.SG || {};
-  window.SG.giftSelector = window.SG.giftSelector || {
-    data: null,
-    loading: false,
-    callbacks: []
-  };
+  window.SG.giftSelector = window.SG.giftSelector || { datasets: {} };
 
   var shared = window.SG.giftSelector;
+  shared.datasets = shared.datasets || {};
+
+  var MODES = {
+    baskets: {
+      rpc: 'get_gift_selector_catalog',
+      title: 'Подбор подарочных корзин по составу',
+      intro: 'Выберите один или несколько ингредиентов — покажем корзины, в которых есть всё выбранное.',
+      loading: 'Загружаем состав подарочных корзин…',
+      shareTitle: 'Подарочные корзины с ингредиентами: ',
+      shareText: 'Посмотрите эту подборку подарочных корзин SweetGift',
+      emptyTitle: 'Вам нужны корзины с таким составом?',
+      emptyText: 'Готовых корзин с выбранным сочетанием пока нет. Отправьте запрос — мы проверим возможность изготовления и свяжемся с вами.',
+      quantityLabel: 'Количество корзин',
+      fallbackTitle: 'Подарочная корзина SweetGift',
+      nouns: ['корзина', 'корзины', 'корзин'],
+      requestType: 'basket'
+    },
+    boxes: {
+      rpc: 'get_gift_box_selector_catalog',
+      title: 'Подбор подарочных наборов по составу',
+      intro: 'Выберите один или несколько ингредиентов — покажем подарочные наборы в коробках и ящиках, в которых есть всё выбранное.',
+      loading: 'Загружаем состав подарочных наборов…',
+      shareTitle: 'Подарочные наборы с ингредиентами: ',
+      shareText: 'Посмотрите эту подборку подарочных наборов SweetGift',
+      emptyTitle: 'Вам нужны подарочные наборы с таким составом?',
+      emptyText: 'Готовых наборов с выбранным сочетанием пока нет. Отправьте запрос — мы проверим возможность изготовления и свяжемся с вами.',
+      quantityLabel: 'Количество наборов',
+      fallbackTitle: 'Подарочный набор SweetGift',
+      nouns: ['набор', 'набора', 'наборов'],
+      requestType: 'gift_box'
+    }
+  };
 
   function escapeHtml(value) {
     return String(value == null ? '' : value)
@@ -186,22 +214,29 @@ filters and sorts products locally without additional network requests.
     window.history.replaceState(null, '', url.pathname + url.search + url.hash);
   }
 
-  function loadData(callback) {
-    if (shared.data) {
-      callback(null, shared.data);
+  function loadData(mode, callback) {
+    var dataset = shared.datasets[mode.rpc] || {
+      data: null,
+      loading: false,
+      callbacks: []
+    };
+    shared.datasets[mode.rpc] = dataset;
+
+    if (dataset.data) {
+      callback(null, dataset.data);
       return;
     }
 
-    shared.callbacks.push(callback);
-    if (shared.loading) return;
-    shared.loading = true;
+    dataset.callbacks.push(callback);
+    if (dataset.loading) return;
+    dataset.loading = true;
 
     function finish(error, data) {
-      shared.loading = false;
-      if (!error) shared.data = data;
+      dataset.loading = false;
+      if (!error) dataset.data = data;
 
-      var callbacks = shared.callbacks.slice();
-      shared.callbacks = [];
+      var callbacks = dataset.callbacks.slice();
+      dataset.callbacks = [];
       callbacks.forEach(function (fn) {
         fn(error, data);
       });
@@ -213,7 +248,7 @@ filters and sorts products locally without additional network requests.
     }
 
     window.SG.core.rpc(
-      'get_gift_selector_catalog',
+      mode.rpc,
       {},
       function (data) {
         finish(null, data || { ingredients: [], products: [] });
@@ -228,17 +263,21 @@ filters and sorts products locally without additional network requests.
     if (!root || root.getAttribute('data-sg-initialized') === '1') return;
     root.setAttribute('data-sg-initialized', '1');
     injectCss();
+    var modeName = root.getAttribute('data-collection') === 'boxes'
+      ? 'boxes'
+      : 'baskets';
+    var mode = MODES[modeName];
 
     root.innerHTML =
       '<div class="sg-selector">' +
         '<header class="sg-selector-head">' +
-          '<h1 class="sg-selector-title">Подбор подарочных корзин по составу</h1>' +
-          '<p class="sg-selector-intro">Выберите один или несколько ингредиентов — покажем корзины, в которых есть всё выбранное.</p>' +
+          '<h1 class="sg-selector-title">' + mode.title + '</h1>' +
+          '<p class="sg-selector-intro">' + mode.intro + '</p>' +
         '</header>' +
-        '<div class="sg-selector-status">Загружаем состав подарочных корзин…</div>' +
+        '<div class="sg-selector-status">' + mode.loading + '</div>' +
       '</div>';
 
-    loadData(function (error, payload) {
+    loadData(mode, function (error, payload) {
       var shell = root.querySelector('.sg-selector');
 
       if (error) {
@@ -255,8 +294,8 @@ filters and sorts products locally without additional network requests.
 
       shell.innerHTML =
         '<header class="sg-selector-head">' +
-          '<h1 class="sg-selector-title">Подбор подарочных корзин по составу</h1>' +
-          '<p class="sg-selector-intro">Выберите один или несколько ингредиентов — покажем корзины, в которых есть всё выбранное.</p>' +
+          '<h1 class="sg-selector-title">' + mode.title + '</h1>' +
+          '<p class="sg-selector-intro">' + mode.intro + '</p>' +
         '</header>' +
         '<section class="sg-selector-panel" aria-labelledby="sg-selector-panel-title">' +
           '<h2 class="sg-selector-panel-title" id="sg-selector-panel-title">Выберите ингредиенты</h2>' +
@@ -286,17 +325,16 @@ filters and sorts products locally without additional network requests.
 
       function shareTitle() {
         return selected.length
-          ? 'Подарочные корзины с ингредиентами: ' +
+          ? mode.shareTitle +
             selected.map(displayName).join(', ')
-          : 'Подбор подарочных корзин по составу';
+          : mode.title;
       }
 
       function updateShare() {
         if (!shareBox || !shareBox.__sgShareOptions) return;
 
         shareBox.__sgShareOptions.title = shareTitle();
-        shareBox.__sgShareOptions.text =
-          'Посмотрите эту подборку подарочных корзин SweetGift';
+        shareBox.__sgShareOptions.text = mode.shareText;
         shareBox.__sgShareOptions.url = window.location.href;
       }
 
@@ -311,7 +349,7 @@ filters and sorts products locally without additional network requests.
           shareBox = window.SG.share.create({
             buttonText: 'Поделиться подборкой',
             title: shareTitle(),
-            text: 'Посмотрите эту подборку подарочных корзин SweetGift',
+            text: mode.shareText,
             url: window.location.href
           });
           shareRoot.appendChild(shareBox);
@@ -380,21 +418,21 @@ filters and sorts products locally without additional network requests.
         var results = filteredProducts();
         count.textContent = 'Найдено: ' + results.length + ' ' +
           (results.length % 10 === 1 && results.length % 100 !== 11
-            ? 'корзина'
+            ? mode.nouns[0]
             : (results.length % 10 >= 2 && results.length % 10 <= 4 &&
               (results.length % 100 < 10 || results.length % 100 >= 20)
-              ? 'корзины'
-              : 'корзин'));
+              ? mode.nouns[1]
+              : mode.nouns[2]));
         reset.hidden = selected.length === 0;
 
         if (!results.length) {
           grid.innerHTML =
             '<section class="sg-selector-request">' +
-              '<h2 class="sg-selector-request-title">Вам нужны корзины с таким составом?</h2>' +
-              '<p class="sg-selector-request-text">Готовых корзин с выбранным сочетанием пока нет. Отправьте запрос — мы проверим возможность изготовления и свяжемся с вами.</p>' +
+              '<h2 class="sg-selector-request-title">' + mode.emptyTitle + '</h2>' +
+              '<p class="sg-selector-request-text">' + mode.emptyText + '</p>' +
               '<form class="sg-selector-request-form">' +
                 '<div class="sg-selector-form-grid">' +
-                  '<label class="sg-selector-field">Количество корзин<input name="quantity" type="number" min="1" max="10000" step="1" inputmode="numeric" required placeholder="Например, 10"></label>' +
+                  '<label class="sg-selector-field">' + mode.quantityLabel + '<input name="quantity" type="number" min="1" max="10000" step="1" inputmode="numeric" required placeholder="Например, 10"></label>' +
                   '<label class="sg-selector-field">Бюджет на каждую, ₽<input name="budget" type="number" min="500" max="10000000" step="100" inputmode="numeric" required placeholder="Например, 7000"></label>' +
                   '<label class="sg-selector-field">Ваше имя<input name="name" type="text" minlength="2" maxlength="100" autocomplete="name" required placeholder="Как к вам обращаться"></label>' +
                   '<label class="sg-selector-field">Телефон<input name="phone" type="tel" minlength="7" maxlength="40" autocomplete="tel" required placeholder="+7 900 000-00-00"></label>' +
@@ -411,7 +449,7 @@ filters and sorts products locally without additional network requests.
 
         grid.innerHTML = results.map(function (result, index) {
           var product = result.product;
-          var title = escapeHtml(product.title || 'Подарочная корзина SweetGift');
+          var title = escapeHtml(product.title || mode.fallbackTitle);
           var url = escapeHtml(product.product_key || product.url || '#');
           var image = escapeHtml(product.image || '');
           var composition = shortComposition(product.composition);
@@ -497,6 +535,7 @@ filters and sorts products locally without additional network requests.
             phone: String(values.get('phone') || ''),
             email: String(values.get('email') || ''),
             comment: String(values.get('comment') || ''),
+            request_type: mode.requestType,
             consent: values.get('consent') === 'on',
             page_url: window.location.href
           })
