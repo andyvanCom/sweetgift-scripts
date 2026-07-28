@@ -65,19 +65,50 @@ SweetGift.ru | Anonymous Order Tracker
     return null;
   }
 
-  function fieldValue(form, names) {
+  function fieldValue(form, names, savedFields) {
     var i;
     var field;
 
-    if (!form || !form.querySelector) return null;
+    if (form && form.querySelector) {
+      for (i = 0; i < names.length; i += 1) {
+        field = form.querySelector('[name="' + names[i] + '"]:checked') ||
+          form.querySelector('[name="' + names[i] + '"]');
+        if (field && field.value != null && String(field.value).trim()) return field.value;
+      }
+    }
 
-    for (i = 0; i < names.length; i += 1) {
-      field = form.querySelector('[name="' + names[i] + '"]:checked') ||
-        form.querySelector('[name="' + names[i] + '"]');
-      if (field && field.value != null && String(field.value).trim()) return field.value;
+    for (i = 0; savedFields && i < names.length; i += 1) {
+      if (
+        savedFields[names[i]] != null &&
+        String(savedFields[names[i]]).trim()
+      ) {
+        return savedFields[names[i]];
+      }
     }
 
     return null;
+  }
+
+  function copyFormFields(form) {
+    var values = {};
+    var elements;
+
+    if (!form || !form.elements) return values;
+    elements = Array.prototype.slice.call(form.elements);
+
+    elements.forEach(function (field) {
+      var name = field && field.name;
+      if (!name || field.disabled) return;
+      if (
+        (field.type === 'radio' || field.type === 'checkbox') &&
+        !field.checked
+      ) return;
+      if (field.value != null && String(field.value).trim()) {
+        values[name] = String(field.value);
+      }
+    });
+
+    return values;
   }
 
   function safePath(url) {
@@ -137,11 +168,15 @@ SweetGift.ru | Anonymous Order Tracker
     return Array.isArray(products) ? products : [];
   }
 
-  function orderId(cart, form) {
+  function orderId(cart, form, savedFields) {
     var value = firstValue(form, ['tildaOrderId', 'tildaTranId']) ||
       firstValue(window.tildaForm || {}, ['orderIdForStat', 'orderid', 'orderId']) ||
       firstValue(cart, ['orderid', 'orderId', 'order_id', 'id']) ||
-      fieldValue(form, ['orderid', 'orderId', 'order_id', 'tranid', 'orderid_hidden']);
+      fieldValue(
+        form,
+        ['orderid', 'orderId', 'order_id', 'tranid', 'orderid_hidden'],
+        savedFields
+      );
 
     if (value) return cleanText(value, 160);
 
@@ -167,12 +202,22 @@ SweetGift.ru | Anonymous Order Tracker
     return null;
   }
 
-  function buildPayload(form, cartSnapshot) {
+  function buildPayload(form, cartSnapshot, savedFields) {
     var cart = cartSnapshot || window.tcart || {};
     var products = cartProducts(cart);
-    var samSebe = cleanText(fieldValue(form, ['SamSebe', 'samsebe']), 100);
-    var message = fieldValue(form, ['HappyMessage', 'happy_message']);
-    var freeCard = cleanText(fieldValue(form, ['FreeCard', 'freecard']), 160);
+    var samSebe = cleanText(
+      fieldValue(form, ['SamSebe', 'samsebe'], savedFields),
+      100
+    );
+    var message = fieldValue(
+      form,
+      ['HappyMessage', 'happy_message'],
+      savedFields
+    );
+    var freeCard = cleanText(
+      fieldValue(form, ['FreeCard', 'freecard'], savedFields),
+      160
+    );
     var discount = number(firstValue(cart, ['discount', 'discountvalue', 'discountValue']));
     var subtotal = number(firstValue(cart, ['prodamount', 'subtotal', 'productsAmount']));
     var orderTotal = number(firstValue(cart, ['amount', 'total', 'orderTotal']));
@@ -182,7 +227,7 @@ SweetGift.ru | Anonymous Order Tracker
       'PromoCode',
       'promoCode',
       'promo'
-    ]) || firstValue(cart, [
+    ], savedFields) || firstValue(cart, [
       'promocode',
       'promoCode',
       'promocodevalue',
@@ -191,7 +236,7 @@ SweetGift.ru | Anonymous Order Tracker
     ]);
 
     return {
-      order_id: orderId(cart, form),
+      order_id: orderId(cart, form, savedFields),
       items: products.slice(0, 100).map(normalizeItem),
       order_total: orderTotal,
       subtotal: subtotal,
@@ -203,18 +248,35 @@ SweetGift.ru | Anonymous Order Tracker
         'delivery-date',
         'DeliveryDate',
         'delivery_date'
-      ]), 80),
+      ], savedFields), 80),
       delivery_interval: cleanText(fieldValue(form, [
         'ВРЕМЯ',
         'delivery-interval',
         'DeliveryInterval',
         'delivery_interval'
-      ]), 100),
-      delivery_type: cleanText(fieldValue(form, ['delivery', 'Delivery', 'delivery_type']), 160),
+      ], savedFields), 100),
+      delivery_type: cleanText(
+        fieldValue(
+          form,
+          ['delivery', 'Delivery', 'delivery_type'],
+          savedFields
+        ),
+        160
+      ),
       delivery_price: number(firstValue(cart, ['delivery', 'deliveryPrice', 'delivery_price'])),
-      payment_system: cleanText(fieldValue(form, ['paymentsystem', 'PaymentSystem']), 100),
+      payment_system: cleanText(
+        fieldValue(
+          form,
+          ['paymentsystem', 'PaymentSystem'],
+          savedFields
+        ),
+        100
+      ),
       promocode: cleanText(promocode, 100),
-      client_type: cleanText(fieldValue(form, ['ClientType', 'client_type']), 100),
+      client_type: cleanText(
+        fieldValue(form, ['ClientType', 'client_type'], savedFields),
+        100
+      ),
       freecard: freeCard,
       has_message: Boolean(message && String(message).trim()),
       message_length: message ? String(message).trim().length : 0,
@@ -304,7 +366,10 @@ SweetGift.ru | Anonymous Order Tracker
     var form = event.target && event.target.tagName === 'FORM' ? event.target : null;
     if (!isCartForm(form)) return;
 
-    var snapshot = copyCart();
+    var snapshot = {
+      cart: copyCart(),
+      fields: copyFormFields(form)
+    };
     if (snapshots) {
       snapshots.set(form, snapshot);
     } else {
@@ -318,13 +383,15 @@ SweetGift.ru | Anonymous Order Tracker
 
     if (!isCartForm(form)) return;
 
-    var cartSnapshot = snapshots
+    var snapshot = snapshots
       ? snapshots.get(form)
       : form.__sgOrderCartSnapshot;
+    var cartSnapshot = snapshot && snapshot.cart;
+    var savedFields = snapshot && snapshot.fields;
     if (!cartSnapshot || !cartProducts(cartSnapshot).length) {
       cartSnapshot = copyCart();
     }
-    var payload = buildPayload(form, cartSnapshot);
+    var payload = buildPayload(form, cartSnapshot, savedFields);
     send(payload, 0);
 
     if (snapshots) {
