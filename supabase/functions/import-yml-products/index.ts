@@ -96,6 +96,22 @@ function extractWeight(value: string): string | null {
   return match ? match[0] : null;
 }
 
+function ingredientMatchesRule(
+  normalized: string,
+  rule: { tag: string; keyword: string },
+): boolean {
+  // The generic keyword `сыр` must still find concatenated YML values such as
+  // `яблокисыр Камамбер`, so a strict word boundary is not suitable here.
+  // Exclude only the two known meat-processing prefixes that caused cheese
+  // false positives. A later real occurrence such as `сырокопченая с сыром
+  // дорблю` still matches.
+  if (rule.tag === "cheese" && rule.keyword === "сыр") {
+    return /сыр(?!окоп|овял)/i.test(normalized);
+  }
+
+  return normalized.includes(rule.keyword);
+}
+
 serve(async () => {
   const startedAt = new Date().toISOString();
   const startedMs = Date.now();
@@ -232,7 +248,7 @@ serve(async () => {
         const matchedTags = Array.from(
           new Set(
             rules
-              .filter((rule) => normalized.includes(rule.keyword))
+              .filter((rule) => ingredientMatchesRule(normalized, rule))
               .map((rule) => rule.tag),
           ),
         );
