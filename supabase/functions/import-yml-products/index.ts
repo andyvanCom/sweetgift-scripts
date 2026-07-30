@@ -339,15 +339,15 @@ serve(async () => {
 
     if (productEntitiesError) throw productEntitiesError;
 
-    const { data: articleProductCacheData, error: articleProductCacheError } =
-      await supabase.rpc("refresh_article_product_cache");
-
-    if (articleProductCacheError) throw articleProductCacheError;
-    if (articleProductCacheData?.ok === false) {
-      throw new Error(
-        articleProductCacheData.error || "Article product cache refresh failed",
-      );
-    }
+    // Product recommendations are intentionally rebuilt by the dedicated
+    // nightly cron after product/article imports and article classification.
+    // Keeping this import lightweight prevents duplicate cache rebuilds and
+    // leaves the frontend on the fast, precomputed read path.
+    const articleProductCacheData = {
+      status: "scheduled",
+      job: "refresh-article-product-cache-daily",
+      schedule: "48 4 * * *",
+    };
 
     await supabase
       .from("feed_sources")
