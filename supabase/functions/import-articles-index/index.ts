@@ -70,6 +70,23 @@ function getImage(html: string): string | null {
   return getMeta(html, "og:image") || getMeta(html, "twitter:image");
 }
 
+function extractArticleProductAliases(html: string): string[] {
+  const aliases = new Set<string>();
+  const containers = html.match(
+    /<[^>]*\bclass=["'][^"']*\bsg-related-products\b[^"']*["'][^>]*>/gi,
+  ) || [];
+
+  for (const container of containers) {
+    const alias = container.match(/\bdata-alias=["']([^"']+)["']/i)?.[1]
+      ?.trim()
+      .toLowerCase();
+
+    if (alias && /^[a-z0-9][a-z0-9-]*$/.test(alias)) aliases.add(alias);
+  }
+
+  return Array.from(aliases);
+}
+
 function getArticleKey(url: string): string {
   try {
     const u = new URL(url);
@@ -218,6 +235,7 @@ async function indexOneArticle(
   const title = getTitle(html, articleKey);
   const description = getDescription(html);
   const image = getImage(html);
+  const articleProductAliases = extractArticleProductAliases(html);
 
   const words = cleanText.split(/\s+/).filter(Boolean);
   const wordCount = words.length;
@@ -251,6 +269,28 @@ async function indexOneArticle(
 
   if (error) throw error;
 
+  const { error: clearArticleUrlError } = await supabaseAdmin
+    .from("article_product_filters")
+    .update({
+      article_url: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("article_url", item.url);
+
+  if (clearArticleUrlError) throw clearArticleUrlError;
+
+  if (articleProductAliases.length) {
+    const { error: articleUrlError } = await supabaseAdmin
+      .from("article_product_filters")
+      .update({
+        article_url: item.url,
+        updated_at: new Date().toISOString(),
+      })
+      .in("alias", articleProductAliases);
+
+    if (articleUrlError) throw articleUrlError;
+  }
+
   return {
     article_key: articleKey,
     title,
@@ -259,6 +299,7 @@ async function indexOneArticle(
     tags_count: tags.length,
     word_count: wordCount,
     reading_time: readingTime,
+    article_product_aliases: articleProductAliases,
   };
 }
 
@@ -318,6 +359,14 @@ async function runImport(
       result.success++;
       result.items.push(indexed);
     } catch (e) {
+      await supabaseAdmin
+        .from("article_product_filters")
+        .update({
+          article_url: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("article_url", item.url);
+
       result.processed++;
       result.failed++;
       result.errors.push({
@@ -331,14 +380,20 @@ async function runImport(
     const sourceKeys = new Set(allFeedItems.map((item) => getArticleKey(item.url)));
     const { data: activeArticles, error: activeArticlesError } = await supabaseAdmin
       .from("articles_index")
-      .select("article_key")
+      .select("article_key,url")
       .eq("is_active", true);
 
     if (activeArticlesError) throw activeArticlesError;
 
-    const missingKeys = (activeArticles || [])
-      .map((row: { article_key: string }) => String(row.article_key))
-      .filter((key: string) => !sourceKeys.has(key));
+    const missingArticles = (activeArticles || [])
+      .filter((row: { article_key: string }) =>
+        !sourceKeys.has(String(row.article_key))
+      );
+    const missingKeys = missingArticles
+      .map((row: { article_key: string }) => String(row.article_key));
+    const missingUrls = missingArticles
+      .map((row: { url: string | null }) => String(row.url || "").trim())
+      .filter(Boolean);
 
     for (let i = 0; i < missingKeys.length; i += 100) {
       const chunk = missingKeys.slice(i, i + 100);
@@ -352,6 +407,19 @@ async function runImport(
 
       if (deactivateError) throw deactivateError;
       result.deactivated += chunk.length;
+    }
+
+    for (let i = 0; i < missingUrls.length; i += 100) {
+      const chunk = missingUrls.slice(i, i + 100);
+      const { error: clearArticleUrlError } = await supabaseAdmin
+        .from("article_product_filters")
+        .update({
+          article_url: null,
+          updated_at: new Date().toISOString(),
+        })
+        .in("article_url", chunk);
+
+      if (clearArticleUrlError) throw clearArticleUrlError;
     }
   }
 
