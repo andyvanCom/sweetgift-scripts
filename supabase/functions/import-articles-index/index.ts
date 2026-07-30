@@ -15,6 +15,24 @@ type FeedItem = {
   lastmod: string | null;
 };
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const value = error as Record<string, unknown>;
+    const parts = ["message", "details", "hint", "code"]
+      .map((key) => value[key])
+      .filter((part) => typeof part === "string" && part.trim());
+    if (parts.length) return parts.join("; ");
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
 function decodeHtml(text: string): string {
   return String(text || "")
     .replace(/&amp;/g, "&")
@@ -198,18 +216,22 @@ async function filterDailyItems(
   items: FeedItem[],
 ): Promise<FeedItem[]> {
   const articleKeys = items.map((item) => getArticleKey(item.url));
-
-  const { data, error } = await supabaseAdmin
-    .from("articles_index")
-    .select("article_key, feed_lastmod")
-    .in("article_key", articleKeys);
-
-  if (error) throw error;
-
   const existing = new Map<string, string | null>();
 
-  for (const row of data || []) {
-    existing.set(row.article_key, row.feed_lastmod || null);
+  // PostgREST encodes .in() values into the URL. Chunking avoids oversized
+  // requests after a large Tilda article re-import.
+  for (let i = 0; i < articleKeys.length; i += 100) {
+    const chunk = articleKeys.slice(i, i + 100);
+    const { data, error } = await supabaseAdmin
+      .from("articles_index")
+      .select("article_key, feed_lastmod")
+      .in("article_key", chunk);
+
+    if (error) throw error;
+
+    for (const row of data || []) {
+      existing.set(row.article_key, row.feed_lastmod || null);
+    }
   }
 
   return items.filter((item) => {
@@ -371,7 +393,7 @@ async function runImport(
       result.failed++;
       result.errors.push({
         url: item.url,
-        error: e instanceof Error ? e.message : String(e),
+        error: getErrorMessage(e),
       });
     }
   }
@@ -497,7 +519,7 @@ Deno.serve(async (req) => {
 
       return Response.json(result);
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
+      const message = getErrorMessage(e);
 
       if (jobLogId) {
         await supabaseAdmin.from("system_job_logs").update({
