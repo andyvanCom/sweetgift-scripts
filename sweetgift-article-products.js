@@ -16,6 +16,7 @@ Legacy articles fall back to the last /stati/ URL segment.
   var STYLE_ID = 'sg-article-products-css';
   var CACHE_PREFIX = 'sg_article_products_';
   var CACHE_TTL = 15 * 60 * 1000;
+  var RETRY_DELAYS = [0, 750, 2000];
   var pendingRequests = new Map();
   var observer = null;
 
@@ -239,16 +240,8 @@ Legacy articles fall back to the last /stati/ URL segment.
     debug('Rendered', data.alias, data.products.length);
   }
 
-  function loadAlias(alias) {
-    var cached = readCache(alias);
-
-    if (cached) {
-      return Promise.resolve(cached);
-    }
-
-    if (pendingRequests.has(alias)) return pendingRequests.get(alias);
-
-    var request = new Promise(function (resolve, reject) {
+  function requestAlias(alias) {
+    return new Promise(function (resolve, reject) {
       if (!window.SG || !window.SG.core || typeof window.SG.core.rpc !== 'function') {
         reject(new Error('SweetGift Core is not ready'));
         return;
@@ -258,13 +251,42 @@ Legacy articles fall back to the last /stati/ URL segment.
         'get_article_products',
         { article_alias: alias },
         function (data) {
-          if (data) writeCache(alias, data);
           resolve(data);
         },
         function (error) {
           reject(error || new Error('RPC failed'));
         }
       );
+    });
+  }
+
+  function requestAliasWithRetry(alias, attempt) {
+    attempt = attempt || 0;
+
+    return new Promise(function (resolve) {
+      window.setTimeout(resolve, RETRY_DELAYS[attempt] || 0);
+    }).then(function () {
+      return requestAlias(alias);
+    }).catch(function (error) {
+      if (attempt + 1 >= RETRY_DELAYS.length) throw error;
+
+      debug('RPC retry', alias, attempt + 2, error);
+      return requestAliasWithRetry(alias, attempt + 1);
+    });
+  }
+
+  function loadAlias(alias) {
+    var cached = readCache(alias);
+
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    if (pendingRequests.has(alias)) return pendingRequests.get(alias);
+
+    var request = requestAliasWithRetry(alias, 0).then(function (data) {
+      if (data) writeCache(alias, data);
+      return data;
     });
 
     pendingRequests.set(alias, request);

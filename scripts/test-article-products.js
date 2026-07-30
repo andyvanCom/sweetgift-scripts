@@ -63,6 +63,7 @@ function createRuntime(options) {
   root.children = containers.slice();
   var observers = [];
   var calls = [];
+  var attempts = {};
   var storage = {};
 
   var document = {
@@ -91,8 +92,14 @@ function createRuntime(options) {
   MutationObserver.prototype.observe = function () {};
   MutationObserver.prototype.disconnect = function () {};
 
+  function schedule(callback) {
+    Promise.resolve().then(callback);
+    return 1;
+  }
+
   var context = {
     window: {
+      setTimeout: schedule,
       location: {
         origin: 'https://sweetgift.ru',
         pathname: options.pathname || '/stati/current-url-alias'
@@ -110,8 +117,16 @@ function createRuntime(options) {
           rpc: function (name, params, success, failure) {
             calls.push({ name: name, alias: params.article_alias });
             var alias = params.article_alias;
+            attempts[alias] = (attempts[alias] || 0) + 1;
 
             Promise.resolve().then(function () {
+              if (
+                options.errorCounts &&
+                attempts[alias] <= (options.errorCounts[alias] || 0)
+              ) {
+                failure(new Error('Temporary RPC error'));
+                return;
+              }
               if (options.errors && options.errors[alias]) {
                 failure(new Error(options.errors[alias]));
                 return;
@@ -132,7 +147,7 @@ function createRuntime(options) {
     Map: Map,
     Date: Date,
     isFinite: isFinite,
-    setTimeout: function () { return 1; },
+    setTimeout: schedule,
     clearTimeout: function () {},
     console: console
   };
@@ -241,6 +256,16 @@ async function run() {
   assert.equal(error.getAttribute('data-sg-state'), 'error');
   assert.equal(error.innerHTML.includes('Не удалось загрузить'), true);
 
+  var retry = new Element('sg-related-products', 'retry-alias');
+  var retryRuntime = createRuntime({
+    containers: [retry],
+    responses: { 'retry-alias': response('retry-alias') },
+    errorCounts: { 'retry-alias': 2 }
+  });
+  await settle();
+  assert.equal(retryRuntime.calls.length, 3);
+  assert.equal(retry.getAttribute('data-sg-state'), 'loaded');
+
   var unresolved = new Element('sg-related-products');
   var unresolvedRuntime = createRuntime({
     pathname: '/not-an-article/',
@@ -294,7 +319,7 @@ async function run() {
   assert.equal(unsafe.innerHTML.includes('<svg'), false);
   assert.equal(unsafe.innerHTML.includes('&lt;svg onload=alert(1)&gt;'), true);
 
-  console.log('article-products: 11 сценариев успешно');
+  console.log('article-products: 12 сценариев успешно');
 }
 
 run().catch(function (error) {
