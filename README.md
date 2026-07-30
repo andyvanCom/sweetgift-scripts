@@ -249,6 +249,17 @@ sweetgift-article-stats.js
 - лайки;
 - популярность.
 
+## Article Products
+
+```text
+sweetgift-article-products.js
+```
+
+Находит в JSON-контенте статьи Tilda «Потоки» контейнеры
+`.sg-related-products`, получает Alias прежде всего из `data-alias` и выводит
+внутрь доступные подарочные корзины. Для старых публикаций без заполненного
+`data-alias` поддерживается fallback на Alias из URL `/stati/{alias}`.
+
 ## Copy Source
 
 ```text
