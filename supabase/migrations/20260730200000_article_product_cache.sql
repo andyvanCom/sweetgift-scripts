@@ -61,7 +61,8 @@ begin
   returning id into v_job_id;
 
   begin
-    delete from public.article_product_cache;
+    delete from public.article_product_cache
+    where article_alias is not null;
 
     insert into public.article_product_cache (
       article_alias,

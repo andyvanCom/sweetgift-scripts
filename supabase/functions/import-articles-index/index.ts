@@ -15,6 +15,18 @@ type FeedItem = {
   lastmod: string | null;
 };
 
+class HttpFetchError extends Error {
+  status: number;
+  url: string;
+
+  constructor(status: number, url: string) {
+    super(`HTTP ${status} for ${url}`);
+    this.name = "HttpFetchError";
+    this.status = status;
+    this.url = url;
+  }
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -151,7 +163,7 @@ async function fetchText(url: string): Promise<string> {
   });
 
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status} for ${url}`);
+    throw new HttpFetchError(res.status, url);
   }
 
   return await res.text();
@@ -370,7 +382,9 @@ async function runImport(
       ? offset + limit
       : null,
     deactivated: 0,
+    skipped: 0,
     errors: [] as Array<{ url: string; error: string }>,
+    warnings: [] as Array<{ url: string; warning: string }>,
     items: [] as Array<unknown>,
   };
 
@@ -390,6 +404,28 @@ async function runImport(
         .eq("article_url", item.url);
 
       result.processed++;
+
+      if (e instanceof HttpFetchError && e.status === 404) {
+        const { error: deactivateMissingError } = await supabaseAdmin
+          .from("articles_index")
+          .update({
+            is_active: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("article_key", getArticleKey(item.url));
+
+        if (!deactivateMissingError) {
+          result.skipped++;
+          result.warnings.push({
+            url: item.url,
+            warning: getErrorMessage(e),
+          });
+          continue;
+        }
+
+        e = deactivateMissingError;
+      }
+
       result.failed++;
       result.errors.push({
         url: item.url,
@@ -512,6 +548,7 @@ Deno.serve(async (req) => {
             candidates: result.total_urls_to_process,
             success: result.success,
             failed: result.failed,
+            skipped: result.skipped,
             deactivated: result.deactivated,
           },
         }).eq("id", jobLogId);
