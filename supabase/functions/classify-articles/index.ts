@@ -262,11 +262,49 @@ Deno.serve(async (req) => {
       inserted += chunk.length;
     }
 
-    const { data: topicData, error: topicError } = await supabase.rpc(
-      "assign_missing_article_seo_topics",
-    );
+    const topicData = {
+      ok: true,
+      processed: 0,
+      matched_to_semantic_core: 0,
+      title_fallback: 0,
+      remaining_without_topic: 0,
+      batches: 0,
+    };
 
-    if (topicError) throw new Error(topicError.message);
+    for (let batch = 0; batch < 100; batch += 1) {
+      const { data, error: topicError } = await supabase.rpc(
+        "assign_missing_article_seo_topics_batch",
+        { p_limit: 15 },
+      );
+
+      if (topicError) throw new Error(topicError.message);
+      if (data?.ok === false) {
+        throw new Error(data.error || "Article topic batch failed");
+      }
+
+      topicData.processed += Number(data?.processed || 0);
+      topicData.matched_to_semantic_core += Number(
+        data?.matched_to_semantic_core || 0,
+      );
+      topicData.title_fallback += Number(data?.title_fallback || 0);
+      topicData.remaining_without_topic = Number(
+        data?.remaining_without_topic || 0,
+      );
+      topicData.batches += 1;
+
+      if (
+        topicData.remaining_without_topic === 0 ||
+        Number(data?.processed || 0) === 0
+      ) {
+        break;
+      }
+    }
+
+    if (topicData.remaining_without_topic > 0) {
+      throw new Error(
+        `Article topics remain unassigned: ${topicData.remaining_without_topic}`,
+      );
+    }
 
     if (jobLogId) {
       await supabase.from("system_job_logs").update({
@@ -279,7 +317,7 @@ Deno.serve(async (req) => {
           processed_articles: allArticles.length,
           inserted_entities: inserted,
           article_seo_topics: topicData,
-          downstream_refreshes: "scheduled separately at 04:50 and 04:55 UTC",
+          downstream_refreshes: "scheduled separately at 05:15 and 05:30 UTC",
         },
       }).eq("id", jobLogId);
     }

@@ -217,8 +217,15 @@ async function runAction(action: string) {
   } catch {
     // Return plain response text when a target does not return JSON.
   }
+  const error = !response.ok
+    ? (
+      result && typeof result === "object" && "error" in result
+        ? String((result as { error?: unknown }).error || "")
+        : String(text || `HTTP ${response.status}`)
+    )
+    : undefined;
   return json(
-    { ok: response.ok, action, status: response.status, result },
+    { ok: response.ok, action, status: response.status, error, result },
     response.ok ? 200 : 502,
   );
 }
