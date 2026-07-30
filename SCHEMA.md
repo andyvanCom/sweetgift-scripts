@@ -99,8 +99,10 @@ product_card_seo_blocks                           top_list_items
 ### Основные поля
 
 - product_key
-- ingredient
+- ingredient_raw
+- ingredient_normalized
 - tag
+- weight_text
 
 ### Используется
 
@@ -159,7 +161,7 @@ age
 - title
 - url
 - description
-- seo_topic
+- seo_topic_title
 - image
 - updated_at
 
@@ -236,6 +238,61 @@ age
 Максимум
 
 8 товаров на статью.
+
+---
+
+## article_product_filters
+
+### Назначение
+
+Безопасное серверное соответствие Alias статьи Tilda и фильтра товаров.
+
+### Основные поля
+
+- alias
+- article_url
+- filter_type
+- filter_value
+- title
+- subtitle
+- limit_count
+- enabled
+- cluster_key
+- cluster_order
+
+Используется RPC `get_article_products`.
+
+### Типы фильтров
+
+- `tag`
+- `ingredient`
+- `ingredient_contains`
+- `ingredient_all_contains`
+
+В `ingredient_all_contains` символ `&&` разделяет обязательные группы,
+а `|` — допустимые варианты внутри одной группы.
+
+---
+
+## article_product_cache
+
+### Назначение
+
+Готовые ночные соответствия Alias статьи и товаров.
+
+### Основные поля
+
+- article_alias
+- product_key
+- rank
+- match_precision
+- popularity_score
+- matched_ingredients
+- refreshed_at
+
+Кеш пересобирается процедурой `refresh_article_product_cache()`. Публичный RPC
+`get_article_products()` читает готовые строки из этой таблицы и дополняет их
+данными `products_catalog`.
 
 ---
 
