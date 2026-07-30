@@ -17,6 +17,7 @@ Legacy articles fall back to the last /stati/ URL segment.
   var CACHE_PREFIX = 'sg_article_products_';
   var CACHE_TTL = 15 * 60 * 1000;
   var RETRY_DELAYS = [0, 750, 2000];
+  var REQUEST_TIMEOUT = 6000;
   var pendingRequests = new Map();
   var observer = null;
 
@@ -247,14 +248,28 @@ Legacy articles fall back to the last /stati/ URL segment.
         return;
       }
 
+      var settled = false;
+      var timeoutId = window.setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        reject(new Error('RPC request timed out'));
+      }, REQUEST_TIMEOUT);
+
+      function finish(callback, value) {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        callback(value);
+      }
+
       window.SG.core.rpc(
         'get_article_products',
         { article_alias: alias },
         function (data) {
-          resolve(data);
+          finish(resolve, data);
         },
         function (error) {
-          reject(error || new Error('RPC failed'));
+          finish(reject, error || new Error('RPC failed'));
         }
       );
     });

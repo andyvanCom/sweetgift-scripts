@@ -92,14 +92,20 @@ function createRuntime(options) {
   MutationObserver.prototype.observe = function () {};
   MutationObserver.prototype.disconnect = function () {};
 
-  function schedule(callback) {
+  function schedule(callback, delay) {
+    if (delay >= 5000) return setImmediate(callback);
     Promise.resolve().then(callback);
-    return 1;
+    return null;
+  }
+
+  function cancelSchedule(id) {
+    if (id) clearImmediate(id);
   }
 
   var context = {
     window: {
       setTimeout: schedule,
+      clearTimeout: cancelSchedule,
       location: {
         origin: 'https://sweetgift.ru',
         pathname: options.pathname || '/stati/current-url-alias'
@@ -120,6 +126,12 @@ function createRuntime(options) {
             attempts[alias] = (attempts[alias] || 0) + 1;
 
             Promise.resolve().then(function () {
+              if (
+                options.hangCounts &&
+                attempts[alias] <= (options.hangCounts[alias] || 0)
+              ) {
+                return;
+              }
               if (
                 options.errorCounts &&
                 attempts[alias] <= (options.errorCounts[alias] || 0)
@@ -148,7 +160,7 @@ function createRuntime(options) {
     Date: Date,
     isFinite: isFinite,
     setTimeout: schedule,
-    clearTimeout: function () {},
+    clearTimeout: cancelSchedule,
     console: console
   };
 
@@ -266,6 +278,17 @@ async function run() {
   assert.equal(retryRuntime.calls.length, 3);
   assert.equal(retry.getAttribute('data-sg-state'), 'loaded');
 
+  var timeoutRetry = new Element('sg-related-products', 'timeout-retry-alias');
+  var timeoutRetryRuntime = createRuntime({
+    containers: [timeoutRetry],
+    responses: { 'timeout-retry-alias': response('timeout-retry-alias') },
+    hangCounts: { 'timeout-retry-alias': 1 }
+  });
+  await settle();
+  await settle();
+  assert.equal(timeoutRetryRuntime.calls.length, 2);
+  assert.equal(timeoutRetry.getAttribute('data-sg-state'), 'loaded');
+
   var unresolved = new Element('sg-related-products');
   var unresolvedRuntime = createRuntime({
     pathname: '/not-an-article/',
@@ -319,7 +342,7 @@ async function run() {
   assert.equal(unsafe.innerHTML.includes('<svg'), false);
   assert.equal(unsafe.innerHTML.includes('&lt;svg onload=alert(1)&gt;'), true);
 
-  console.log('article-products: 12 сценариев успешно');
+  console.log('article-products: 13 сценариев успешно');
 }
 
 run().catch(function (error) {
