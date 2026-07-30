@@ -126,6 +126,12 @@ function getArticleKey(url: string): string {
   }
 }
 
+function isHoneyArticleAlias(alias: string): boolean {
+  return /(^|-)(med|meda|mede|medom|medovyy|medovaya|medovom)(-|$)/.test(
+    alias,
+  );
+}
+
 function extractSitemapUrls(xml: string): string[] {
   return [...xml.matchAll(/<loc>(.*?)<\/loc>/gi)]
     .map((m) => decodeHtml(m[1]))
@@ -327,6 +333,7 @@ async function indexOneArticle(
 
   return {
     article_key: articleKey,
+    url: item.url,
     title,
     image,
     feed_lastmod: item.lastmod,
@@ -432,6 +439,25 @@ async function runImport(
         error: getErrorMessage(e),
       });
     }
+  }
+
+  const honeyArticles = result.items.flatMap((item: any) =>
+    (item.article_product_aliases || [])
+      .filter((alias: string) => isHoneyArticleAlias(alias))
+      .map((alias: string) => ({
+        alias,
+        title: item.title,
+        url: item.url,
+      }))
+  );
+
+  if (honeyArticles.length) {
+    const { error: honeyFiltersError } = await supabaseAdmin.rpc(
+      "sync_honey_article_filters",
+      { p_articles: honeyArticles },
+    );
+
+    if (honeyFiltersError) throw honeyFiltersError;
   }
 
   if (mode === "daily") {
