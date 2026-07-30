@@ -132,6 +132,7 @@ Deno.serve(async (req) => {
       "import-yml-products",
       "import-articles-index",
       "classify-articles",
+      "refresh-article-product-cache",
     ];
     const { data: jobRows, error: jobsError } = await supabase
       .from("system_job_logs")

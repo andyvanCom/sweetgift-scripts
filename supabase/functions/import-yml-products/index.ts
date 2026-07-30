@@ -339,6 +339,16 @@ serve(async () => {
 
     if (productEntitiesError) throw productEntitiesError;
 
+    const { data: articleProductCacheData, error: articleProductCacheError } =
+      await supabase.rpc("refresh_article_product_cache");
+
+    if (articleProductCacheError) throw articleProductCacheError;
+    if (articleProductCacheData?.ok === false) {
+      throw new Error(
+        articleProductCacheData.error || "Article product cache refresh failed",
+      );
+    }
+
     await supabase
       .from("feed_sources")
       .update({
@@ -362,6 +372,7 @@ serve(async () => {
           ingredients_inserted: ingredientsInserted,
           deactivated,
           product_seo_entities: productEntitiesData,
+          article_product_cache: articleProductCacheData,
         },
       }).eq("id", jobLogId);
     }
@@ -372,6 +383,7 @@ serve(async () => {
       sourceCount: sourceProductKeys.size,
       imported,
       productSeoEntities: productEntitiesData,
+      articleProductCache: articleProductCacheData,
       ingredientsInserted,
       deactivated,
       startedAt,

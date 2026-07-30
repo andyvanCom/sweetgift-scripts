@@ -48,7 +48,14 @@ function ranked(map: Map<string, number>, limit = 10) {
 
 async function getDashboard(days: number) {
   const since = new Date(Date.now() - days * 86400000).toISOString();
-  const [orderResult, jobResult, productResult, articleResult, reportResult] =
+  const [
+    orderResult,
+    jobResult,
+    productResult,
+    articleResult,
+    reportResult,
+    articleProductCacheResult,
+  ] =
     await Promise.all([
       supabase.from("product_orders").select(
         "order_id,product_key,product_title,category_slug,quantity,item_total,order_total,discount,is_gift,has_message,delivery_type,payment_system,promocode,created_at",
@@ -67,6 +74,7 @@ async function getDashboard(days: number) {
         head: true,
       }).eq("is_active", true),
       supabase.rpc("get_daily_report_text"),
+      supabase.rpc("get_article_product_cache_status"),
     ]);
 
   const errors = [
@@ -75,6 +83,7 @@ async function getDashboard(days: number) {
     productResult.error,
     articleResult.error,
     reportResult.error,
+    articleProductCacheResult.error,
   ].filter(Boolean);
   if (errors.length) {
     throw new Error(errors.map((error) => error!.message).join("; "));
@@ -133,6 +142,12 @@ async function getDashboard(days: number) {
       products: productResult.count || 0,
       articles: articleResult.count || 0,
     },
+    article_product_cache: articleProductCacheResult.data || {
+      active_filters: 0,
+      cached_aliases: 0,
+      cached_products: 0,
+      refreshed_at: null,
+    },
     orders: {
       total: orderList.length,
       revenue,
@@ -158,18 +173,34 @@ async function getDashboard(days: number) {
   };
 }
 
-const actions: Record<string, { name: string; query?: string }> = {
+const actions: Record<string, { name?: string; query?: string; rpc?: string }> = {
   products: { name: "import-yml-products" },
   articles: { name: "import-articles-index", query: "?mode=daily&limit=100" },
   classify: { name: "classify-articles" },
+  articleProducts: { rpc: "refresh_article_product_cache" },
   report: { name: "send-daily-report" },
 };
 
 async function runAction(action: string) {
   const target = actions[action];
   if (!target) return json({ ok: false, error: "Unknown action" }, 400);
+
+  if (target.rpc) {
+    const { data, error } = await supabase.rpc(target.rpc);
+    if (error) return json({ ok: false, action, error: error.message }, 502);
+    if (data?.ok === false) {
+      return json({
+        ok: false,
+        action,
+        error: data.error || "RPC action failed",
+        result: data,
+      }, 502);
+    }
+    return json({ ok: true, action, status: 200, result: data });
+  }
+
   const response = await fetch(
-    `${SUPABASE_URL}/functions/v1/${target.name}${target.query || ""}`,
+    `${SUPABASE_URL}/functions/v1/${target.name!}${target.query || ""}`,
     {
       method: "POST",
       headers: {
@@ -201,7 +232,7 @@ const HTML = `<!doctype html><html lang="ru"><head>
 <div id="login" class="login"><div class="brand"><div class="logo">S</div><div><h2>SweetGift Admin</h2><div class="sub">Аналитика и управление обработкой</div></div></div><p>Войдите под учётной записью администратора.</p><form id="loginForm"><div class="field"><input id="email" type="email" autocomplete="username" placeholder="Email" required></div><div class="field"><input id="password" type="password" autocomplete="current-password" placeholder="Пароль" required><button class="btn">Войти</button></div></form><div id="loginError" class="error"></div></div>
 <main id="app" class="wrap hidden"><header class="top"><div class="brand"><div class="logo">S</div><div><h1>SweetGift</h1><div class="sub">Заказы и ночная обработка</div></div></div><div class="toolbar"><select id="period"><option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">90 дней</option></select><button id="refresh" class="btn alt">Обновить</button><button id="logout" class="btn alt">Выйти</button></div></header>
 <section id="metrics" class="grid"></section>
-<section class="section"><h2>Управление pipeline</h2><div class="card"><div class="actions"><button class="btn action" data-action="products">Импорт товаров<small>YML и SEO-сущности</small></button><button class="btn action" data-action="articles">Импорт статей<small>Sitemap и индекс</small></button><button class="btn action" data-action="classify">Классификация<small>Темы и сущности</small></button><button class="btn warn action" data-action="report">Отправить отчёт<small>Письмо прямо сейчас</small></button></div><div id="actionResult" class="result hidden"></div></div></section>
+<section class="section"><h2>Управление pipeline</h2><div class="card"><div class="actions"><button class="btn action" data-action="products">Импорт товаров<small>YML, сущности и подборки</small></button><button class="btn action" data-action="articles">Импорт статей<small>Sitemap и индекс</small></button><button class="btn action" data-action="classify">Классификация<small>Темы и сущности</small></button><button class="btn action" data-action="articleProducts">Пересчитать подборки<small>Готовые товары для статей</small></button><button class="btn warn action" data-action="report">Отправить отчёт<small>Письмо прямо сейчас</small></button></div><div id="actionResult" class="result hidden"></div></div></section>
 <section class="section cols"><div><h2>Состояние обработки</h2><div class="card"><table><thead><tr><th>Этап</th><th>Статус</th><th>Обработано</th><th>Завершён</th></tr></thead><tbody id="jobs"></tbody></table></div></div><div><h2>Заказы по дням</h2><div id="daily" class="card"></div></div></section>
 <section class="section cols"><div><h2>Популярные товары</h2><div id="products" class="card"></div></div><div><h2>Категории</h2><div id="categories" class="card"></div></div></section>
 <section class="section cols"><div><h2>Последние заказы</h2><div class="card"><table><thead><tr><th>Заказ</th><th>Дата</th><th>Позиций</th><th>Сумма</th></tr></thead><tbody id="orders"></tbody></table></div></div><div><h2>Ежедневный отчёт</h2><div id="report" class="report"></div></div></section>
@@ -212,7 +243,7 @@ async function authRequest(grant,body){const r=await fetch(AUTH_URL+"/token?gran
 async function ensureSession(){if(!state.session)throw new Error("Требуется вход");if((state.session.expires_at||0)>Math.floor(Date.now()/1000)+60)return state.session;return await authRequest("refresh_token",{refresh_token:state.session.refresh_token})}
 async function api(path,options={}){const session=await ensureSession(),r=await fetch(ADMIN_URL+"/"+path,{...options,headers:{...(options.headers||{}),"authorization":"Bearer "+session.access_token,"content-type":"application/json"}}),b=await r.json();if(!r.ok)throw new Error(b.error||"Ошибка запроса");return b}
 function bars(id,rows,key="name"){const max=Math.max(1,...rows.map(x=>+x.value||0));el(id).innerHTML=rows.length?rows.map(x=>'<div class="barrow"><div class="barname" title="'+esc(x[key])+'">'+esc(x[key])+'</div><div class="bar"><i style="width:'+Math.max(3,(+x.value||0)/max*100)+'%"></i></div><b>'+esc(x.value)+'</b></div>').join(""):'<div class="sub">Пока нет данных</div>'}
-function render(d){const o=d.orders;el("metrics").innerHTML=[["Заказы",o.total],["Выручка",money(o.revenue)],["Средний чек",money(o.average_check)],["Товаров продано",o.items],["Подарки",o.gifts],["С поздравлением",o.messages],["С промокодом",o.promocodes],["Каталог",d.catalog.products+" / "+d.catalog.articles]].map(x=>'<div class="metric card"><div class="sub">'+esc(x[0])+'</div><b>'+esc(x[1])+'</b></div>').join("");el("jobs").innerHTML=d.pipeline.map(j=>'<tr><td>'+esc(j.job_name)+'</td><td><span class="status '+(j.status==="success"?"success":"")+'"><i class="dot"></i>'+esc(j.status)+'</span></td><td>'+esc(j.processed_count)+'</td><td>'+date(j.finished_at||j.started_at)+'</td></tr>').join("");bars("daily",o.daily,"date");bars("products",o.top_products);bars("categories",o.top_categories);el("orders").innerHTML=o.recent.length?o.recent.map(x=>'<tr><td>…'+esc(x.order_id)+'</td><td>'+date(x.created_at)+'</td><td>'+esc(x.items)+'</td><td>'+money(x.total)+'</td></tr>').join(""):'<tr><td colspan="4" class="sub">Заказов за период нет</td></tr>';el("report").textContent=d.report}
+function render(d){const o=d.orders,c=d.article_product_cache||{};el("metrics").innerHTML=[["Заказы",o.total],["Выручка",money(o.revenue)],["Средний чек",money(o.average_check)],["Товаров продано",o.items],["Подарки",o.gifts],["С поздравлением",o.messages],["С промокодом",o.promocodes],["Каталог",d.catalog.products+" / "+d.catalog.articles],["Подборки статей",(c.cached_aliases||0)+" / "+(c.cached_products||0)]].map(x=>'<div class="metric card"><div class="sub">'+esc(x[0])+'</div><b>'+esc(x[1])+'</b></div>').join("");el("jobs").innerHTML=d.pipeline.map(j=>'<tr><td>'+esc(j.job_name)+'</td><td><span class="status '+(j.status==="success"?"success":"")+'"><i class="dot"></i>'+esc(j.status)+'</span></td><td>'+esc(j.processed_count)+'</td><td>'+date(j.finished_at||j.started_at)+'</td></tr>').join("");bars("daily",o.daily,"date");bars("products",o.top_products);bars("categories",o.top_categories);el("orders").innerHTML=o.recent.length?o.recent.map(x=>'<tr><td>…'+esc(x.order_id)+'</td><td>'+date(x.created_at)+'</td><td>'+esc(x.items)+'</td><td>'+money(x.total)+'</td></tr>').join(""):'<tr><td colspan="4" class="sub">Заказов за период нет</td></tr>';el("report").textContent=d.report}
 async function load(){el("refresh").disabled=true;try{render(await api("api/dashboard?days="+el("period").value));el("login").classList.add("hidden");el("app").classList.remove("hidden")}finally{el("refresh").disabled=false}}
 el("loginForm").addEventListener("submit",async e=>{e.preventDefault();el("loginError").textContent="";try{await authRequest("password",{email:el("email").value,password:el("password").value});await load()}catch(x){saveSession(null);el("loginError").textContent=x.message}});el("refresh").onclick=()=>load().catch(x=>alert(x.message));el("period").onchange=()=>load().catch(x=>alert(x.message));el("logout").onclick=()=>{saveSession(null);location.reload()};
 document.querySelectorAll("[data-action]").forEach(b=>b.onclick=async()=>{const action=b.dataset.action;if(action==="report"&&!confirm("Отправить отчёт на почту сейчас?"))return;if(!confirm("Запустить «"+b.firstChild.textContent.trim()+"»?"))return;b.disabled=true;const box=el("actionResult");box.classList.remove("hidden");box.textContent="Выполняется…";try{const r=await api("api/run",{method:"POST",body:JSON.stringify({action})});box.textContent=JSON.stringify(r,null,2);await load()}catch(x){box.textContent="Ошибка: "+x.message}finally{b.disabled=false}});if(state.session)load().catch(()=>saveSession(null));
