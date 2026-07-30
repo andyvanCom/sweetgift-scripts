@@ -235,8 +235,11 @@ async function run() {
   });
   await settle();
   assert.equal(unknown.getAttribute('data-sg-state'), 'empty');
+  assert.equal(unknown.innerHTML.includes('пока нет подходящих'), true);
   assert.equal(empty.getAttribute('data-sg-state'), 'empty');
+  assert.equal(empty.innerHTML.includes('пока нет подходящих'), true);
   assert.equal(error.getAttribute('data-sg-state'), 'error');
+  assert.equal(error.innerHTML.includes('Не удалось загрузить'), true);
 
   var unresolved = new Element('sg-related-products');
   var unresolvedRuntime = createRuntime({

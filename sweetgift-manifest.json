@@ -1,5 +1,5 @@
 {
-  "version": "1.0.9",
+  "version": "1.0.10",
   "modules": [
     {
       "name": "core",
@@ -54,7 +54,7 @@
       "name": "article-products",
       "enabled": true,
       "src": "sweetgift-article-products.js",
-      "version": "3",
+      "version": "4",
       "pages": ["/stati/*"]
     },
     {

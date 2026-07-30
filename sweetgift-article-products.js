@@ -16,10 +16,8 @@ Legacy articles fall back to the last /stati/ URL segment.
   var STYLE_ID = 'sg-article-products-css';
   var CACHE_PREFIX = 'sg_article_products_';
   var CACHE_TTL = 15 * 60 * 1000;
-  var DOM_WAIT_MS = 15000;
   var pendingRequests = new Map();
   var observer = null;
-  var stopTimer = null;
 
   function debug() {
     if (window.SG && (window.SG.debug || (window.SG.core && window.SG.core.debug))) {
@@ -137,12 +135,35 @@ Legacy articles fall back to the last /stati/ URL segment.
       '.sg-article-products__links{display:flex;flex-wrap:wrap;gap:9px;}',
       '.sg-article-products__link{display:inline-flex;padding:9px 13px;border:1px solid #dfc8c3;border-radius:999px;background:#fff;color:var(--sg-ap-brand)!important;text-decoration:none!important;font-size:14px;line-height:1.3;transition:border-color .2s,background .2s;}',
       '.sg-article-products__link:hover{border-color:var(--sg-ap-brand);background:#fff4f6;}',
+      '.sg-article-products--state{margin-top:24px;margin-bottom:24px;padding:22px 24px;text-align:center;}',
+      '.sg-article-products__status{margin:0;color:var(--sg-ap-muted);font-size:15px;line-height:1.5;}',
+      '.sg-article-products__status--loading:before{content:"";display:inline-block;width:14px;height:14px;margin-right:9px;border:2px solid #eadfdd;border-top-color:var(--sg-ap-brand);border-radius:50%;vertical-align:-2px;animation:sg-ap-spin .8s linear infinite;}',
+      '.sg-article-products__status--error{color:#9a284d;}',
+      '@keyframes sg-ap-spin{to{transform:rotate(360deg);}}',
       '@media(max-width:1080px){.sg-article-products__grid{grid-template-columns:repeat(3,minmax(0,1fr));}}',
       '@media(max-width:760px){.sg-article-products{margin:36px 0 24px;padding:20px 16px;border-radius:20px;}.sg-article-products__title{font-size:25px;}.sg-article-products__subtitle{font-size:14px;}.sg-article-products__grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}.sg-article-products__body{min-height:160px;padding:12px;}.sg-article-products__name{font-size:14px;}.sg-article-products__price{font-size:17px;}.sg-article-products__button{font-size:13px;}}',
       '@media(max-width:420px){.sg-article-products__grid{grid-template-columns:1fr;}.sg-article-products__body{min-height:0;}.sg-article-products__image{aspect-ratio:4/3;}}'
     ].join('');
 
     document.head.appendChild(style);
+  }
+
+  function renderState(container, state, message) {
+    injectCss();
+
+    container.innerHTML = [
+      '<section class="sg-article-products sg-article-products--state">',
+        '<p class="sg-article-products__status sg-article-products__status--',
+          escapeHtml(state),
+        '">',
+          escapeHtml(message),
+        '</p>',
+      '</section>'
+    ].join('');
+
+    container.setAttribute(ROOT_ATTR, '1');
+    container.setAttribute('data-sg-state', state);
+    container.setAttribute('aria-busy', state === 'loading' ? 'true' : 'false');
   }
 
   function productCard(product) {
@@ -214,6 +235,7 @@ Legacy articles fall back to the last /stati/ URL segment.
 
     container.setAttribute(ROOT_ATTR, '1');
     container.setAttribute('data-sg-state', 'loaded');
+    container.setAttribute('aria-busy', 'false');
     debug('Rendered', data.alias, data.products.length);
   }
 
@@ -263,14 +285,17 @@ Legacy articles fall back to the last /stati/ URL segment.
     var alias = resolveAlias(container);
     if (!alias) return;
 
-    container.setAttribute('data-sg-state', 'loading');
+    renderState(container, 'loading', 'Подбираем подходящие подарочные корзины…');
 
     loadAlias(alias).then(function (data) {
       if (!container.isConnected) return;
 
       if (!data || !Array.isArray(data.products) || !data.products.length) {
-        container.innerHTML = '';
-        container.setAttribute('data-sg-state', 'empty');
+        renderState(
+          container,
+          'empty',
+          'Для этой статьи пока нет подходящих доступных товаров.'
+        );
         debug('No configured products for', alias);
         return;
       }
@@ -278,7 +303,11 @@ Legacy articles fall back to the last /stati/ URL segment.
       render(container, data);
     }).catch(function (error) {
       if (!container.isConnected) return;
-      container.setAttribute('data-sg-state', 'error');
+      renderState(
+        container,
+        'error',
+        'Не удалось загрузить подборку товаров. Обновите страницу немного позже.'
+      );
       debug('RPC failed', alias, error);
     });
   }
@@ -315,12 +344,6 @@ Legacy articles fall back to the last /stati/ URL segment.
       childList: true,
       subtree: true
     });
-
-    stopTimer = setTimeout(function () {
-      if (observer) observer.disconnect();
-      observer = null;
-      stopTimer = null;
-    }, DOM_WAIT_MS);
   }
 
   if (document.readyState === 'loading') {
