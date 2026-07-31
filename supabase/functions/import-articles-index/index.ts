@@ -359,7 +359,10 @@ async function runImport(
     offset = 0;
   }
 
-  const batch = mode === "daily" ? items : items.slice(offset, offset + limit);
+  // Daily imports can contain hundreds of republished Tilda articles. Keep
+  // each Edge invocation below the runtime limit and continue in a separate
+  // invocation after the current batch has been committed.
+  const batch = items.slice(offset, offset + limit);
 
   const { data: rulesData, error: rulesError } = await supabaseAdmin
     .from("ingredient_tag_rules")
@@ -382,7 +385,7 @@ async function runImport(
     processed: 0,
     success: 0,
     failed: 0,
-    has_more: mode === "daily" ? false : offset + limit < items.length,
+    has_more: offset + limit < items.length,
     next_offset: mode === "daily"
       ? null
       : offset + limit < items.length
@@ -535,6 +538,21 @@ Deno.serve(async (req) => {
     let jobLogId: number | string | null = null;
 
     try {
+      await supabaseAdmin
+        .from("system_job_logs")
+        .update({
+          finished_at: new Date().toISOString(),
+          status: "error",
+          duration_ms: 10 * 60 * 1000,
+          error_message: "Run exceeded the Edge Function execution window",
+        })
+        .eq("job_name", "import-articles-index")
+        .eq("status", "running")
+        .lt(
+          "started_at",
+          new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+        );
+
       const { data: jobLog } = await supabaseAdmin
         .from("system_job_logs")
         .insert({
@@ -556,6 +574,10 @@ Deno.serve(async (req) => {
 
       const offset = Math.max(Number(url.searchParams.get("offset") || "0"), 0);
       const mode = url.searchParams.get("mode") || "daily";
+      const chainDepth = Math.max(
+        Number(url.searchParams.get("chain_depth") || "0"),
+        0,
+      );
 
       const result = await runImport(supabaseAdmin, limit, offset, mode);
 
@@ -578,6 +600,45 @@ Deno.serve(async (req) => {
             deactivated: result.deactivated,
           },
         }).eq("id", jobLogId);
+      }
+
+      if (mode === "daily" && result.has_more && chainDepth < 9) {
+        const nextUrl = new URL(req.url);
+        nextUrl.searchParams.set("mode", "daily");
+        nextUrl.searchParams.set("limit", String(limit));
+        nextUrl.searchParams.set("offset", "0");
+        nextUrl.searchParams.set("chain_depth", String(chainDepth + 1));
+
+        const nextBatch = fetch(nextUrl, {
+          headers: requestSecret
+            ? {
+              "x-report-secret": requestSecret,
+              "Content-Type": "application/json",
+            }
+            : { "Content-Type": "application/json" },
+        }).then(async (response) => {
+          const body = await response.text();
+
+          if (!response.ok) {
+            throw new Error(
+              `Next article batch failed: HTTP ${response.status}; ${body}`,
+            );
+          }
+        }).catch((error) => {
+          console.error("Unable to continue article import", error);
+        });
+
+        const edgeRuntime = (
+          globalThis as typeof globalThis & {
+            EdgeRuntime?: { waitUntil: (promise: Promise<unknown>) => void };
+          }
+        ).EdgeRuntime;
+
+        if (edgeRuntime?.waitUntil) {
+          edgeRuntime.waitUntil(nextBatch);
+        } else {
+          await nextBatch;
+        }
       }
 
       return Response.json(result);
