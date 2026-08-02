@@ -132,6 +132,11 @@ function isHoneyArticleAlias(alias: string): boolean {
   );
 }
 
+function isNutArticleAlias(alias: string): boolean {
+  return /(oreh|mindal|funduk|keshyu|kedrov|arahis|fistash|pekan|kokos)/
+    .test(alias);
+}
+
 function extractSitemapUrls(xml: string): string[] {
   return [...xml.matchAll(/<loc>(.*?)<\/loc>/gi)]
     .map((m) => decodeHtml(m[1]))
@@ -461,6 +466,25 @@ async function runImport(
     );
 
     if (honeyFiltersError) throw honeyFiltersError;
+  }
+
+  const nutArticles = result.items.flatMap((item: any) =>
+    (item.article_product_aliases || [])
+      .filter((alias: string) => isNutArticleAlias(alias))
+      .map((alias: string) => ({
+        alias,
+        title: item.title,
+        url: item.url,
+      }))
+  );
+
+  if (nutArticles.length) {
+    const { error: nutFiltersError } = await supabaseAdmin.rpc(
+      "sync_nut_article_filters",
+      { p_articles: nutArticles },
+    );
+
+    if (nutFiltersError) throw nutFiltersError;
   }
 
   if (mode === "daily") {
