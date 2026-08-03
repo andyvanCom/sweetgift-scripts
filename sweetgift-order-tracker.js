@@ -19,7 +19,7 @@ SweetGift.ru | Anonymous Order Tracker
   window.SG.orderTracker = window.SG.orderTracker || {};
 
   var tracker = window.SG.orderTracker;
-  tracker.version = '1.0.0';
+  tracker.version = '1.0.1';
 
   function core() {
     return window.SG && window.SG.core ? window.SG.core : null;
@@ -194,11 +194,21 @@ SweetGift.ru | Anonymous Order Tracker
     return value;
   }
 
-  function boolFromChoice(value, truePattern, falsePattern) {
-    var normalized = String(value == null ? '' : value).toLowerCase();
+  function giftFromSamSebe(value) {
+    var normalized = String(value == null ? '' : value)
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
+
     if (!normalized) return null;
-    if (falsePattern && falsePattern.test(normalized)) return false;
-    if (truePattern && truePattern.test(normalized)) return true;
+
+    // The field asks whether the customer orders for themselves. Therefore
+    // "Нет" means that the order is a gift, while "Да" means self-purchase.
+    if (/^(нет|no)(?:$|[\s,.;:!?-])/.test(normalized)) return true;
+    if (/^(да|yes)(?:$|[\s,.;:!?-])/.test(normalized)) return false;
+    if (/не\s+себе|подар|друг|получател/.test(normalized)) return true;
+    if (/себе|сам/.test(normalized)) return false;
+
     return null;
   }
 
@@ -241,7 +251,7 @@ SweetGift.ru | Anonymous Order Tracker
       order_total: orderTotal,
       subtotal: subtotal,
       discount: discount,
-      is_gift: boolFromChoice(samSebe, /подар|друг|получател/, /себе|сам/),
+      is_gift: giftFromSamSebe(samSebe),
       samsebe: samSebe,
       delivery_date: cleanText(fieldValue(form, [
         'Дата_доставки_2',
