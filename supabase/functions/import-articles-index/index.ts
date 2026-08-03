@@ -137,6 +137,10 @@ function isNutArticleAlias(alias: string): boolean {
     .test(alias);
 }
 
+function isBuilderDayArticleAlias(alias: string): boolean {
+  return alias.includes("den-stroitelya") || alias.includes("stroitelyu");
+}
+
 function extractSitemapUrls(xml: string): string[] {
   return [...xml.matchAll(/<loc>(.*?)<\/loc>/gi)]
     .map((m) => decodeHtml(m[1]))
@@ -485,6 +489,25 @@ async function runImport(
     );
 
     if (nutFiltersError) throw nutFiltersError;
+  }
+
+  const builderDayArticles = result.items.flatMap((item: any) =>
+    (item.article_product_aliases || [])
+      .filter((alias: string) => isBuilderDayArticleAlias(alias))
+      .map((alias: string) => ({
+        alias,
+        title: item.title,
+        url: item.url,
+      }))
+  );
+
+  if (builderDayArticles.length) {
+    const { error: builderDayFiltersError } = await supabaseAdmin.rpc(
+      "sync_builder_day_article_filters",
+      { p_articles: builderDayArticles },
+    );
+
+    if (builderDayFiltersError) throw builderDayFiltersError;
   }
 
   if (mode === "daily") {
