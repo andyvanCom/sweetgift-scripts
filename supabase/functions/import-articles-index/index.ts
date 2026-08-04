@@ -141,6 +141,11 @@ function isBuilderDayArticleAlias(alias: string): boolean {
   return alias.includes("den-stroitelya") || alias.includes("stroitelyu");
 }
 
+function isCoffeeArticleAlias(alias: string): boolean {
+  return /kofe|kofeyn|arabik|robust|espresso|americano|kapuchino|latte|obzhark|pomol/
+    .test(alias);
+}
+
 function extractSitemapUrls(xml: string): string[] {
   return [...xml.matchAll(/<loc>(.*?)<\/loc>/gi)]
     .map((m) => decodeHtml(m[1]))
@@ -508,6 +513,25 @@ async function runImport(
     );
 
     if (builderDayFiltersError) throw builderDayFiltersError;
+  }
+
+  const coffeeArticles = result.items.flatMap((item: any) =>
+    (item.article_product_aliases || [])
+      .filter((alias: string) => isCoffeeArticleAlias(alias))
+      .map((alias: string) => ({
+        alias,
+        title: item.title,
+        url: item.url,
+      }))
+  );
+
+  if (coffeeArticles.length) {
+    const { error: coffeeFiltersError } = await supabaseAdmin.rpc(
+      "sync_coffee_article_filters",
+      { p_articles: coffeeArticles },
+    );
+
+    if (coffeeFiltersError) throw coffeeFiltersError;
   }
 
   if (mode === "daily") {
