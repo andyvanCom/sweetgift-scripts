@@ -532,6 +532,12 @@ async function runImport(
     );
 
     if (coffeeFiltersError) throw coffeeFiltersError;
+
+    const { error: coffeeOverridesError } = await supabaseAdmin.rpc(
+      "apply_coffee_article_filter_overrides",
+    );
+
+    if (coffeeOverridesError) throw coffeeOverridesError;
   }
 
   if (mode === "daily") {

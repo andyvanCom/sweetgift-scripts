@@ -646,6 +646,20 @@ frontend получал готовую подборку без тяжёлой ф
 
 ---
 
+## apply_coffee_article_filter_overrides
+
+После основной синхронизации сохраняет прежние Alias и уточняет только три
+темы по фактическим названиям товаров:
+
+- `aromatnyy-kofe-v-podarok` — Vanilla, Truffle, Cardamom, Mokka и Noir;
+- `kofe-dlya-espresso` — Egoiste Espresso, Illy Espresso и Lavazza Espresso;
+- `italyanskiy-kofe-v-podarok` — Illy, Bialetti, Lavazza и Piazza Del Caffe.
+
+Остальные информационные темы без структурированного признака продолжают
+использовать безопасную общую подборку доступных корзин с кофе.
+
+---
+
 ## get_daily_report_text
 
 ### Назначение
