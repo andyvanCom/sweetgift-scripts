@@ -109,6 +109,14 @@ function ingredientMatchesRule(
     return /сыр(?!окоп|овял)/i.test(normalized);
   }
 
+  // A plain substring check treats the ending of `вручайте` as `чай`.
+  // Keep support for concatenated YML values such as `граммчай Chabo` and
+  // for tea adjectives, but require a real tea-token boundary.
+  if (rule.tag === "tea" && rule.keyword === "чай") {
+    return /(?:^|[^а-яё]|грамм)чай(?=$|[^а-яё]|н(?:ый|ая|ое|ые|ого|ому|ым|ом|ой|ую|ых|ыми)(?:$|[^а-яё]))/i
+      .test(normalized);
+  }
+
   return normalized.includes(rule.keyword);
 }
 
