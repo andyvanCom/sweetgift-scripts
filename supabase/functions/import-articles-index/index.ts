@@ -146,6 +146,11 @@ function isCoffeeArticleAlias(alias: string): boolean {
     .test(alias);
 }
 
+function isTeaArticleAlias(alias: string): boolean {
+  return /(^|-)(chay|chaya|chaem|chaynoe|chaynaya)(-|$)|basilur|chabo|dilmah|hampstead|riston|chelton|hilltop|earl-grey/
+    .test(alias);
+}
+
 function extractSitemapUrls(xml: string): string[] {
   return [...xml.matchAll(/<loc>(.*?)<\/loc>/gi)]
     .map((m) => decodeHtml(m[1]))
@@ -538,6 +543,25 @@ async function runImport(
     );
 
     if (coffeeOverridesError) throw coffeeOverridesError;
+  }
+
+  const teaArticles = result.items.flatMap((item: any) =>
+    (item.article_product_aliases || [])
+      .filter((alias: string) => isTeaArticleAlias(alias))
+      .map((alias: string) => ({
+        alias,
+        title: item.title,
+        url: item.url,
+      }))
+  );
+
+  if (teaArticles.length) {
+    const { error: teaFiltersError } = await supabaseAdmin.rpc(
+      "sync_tea_article_filters",
+      { p_articles: teaArticles },
+    );
+
+    if (teaFiltersError) throw teaFiltersError;
   }
 
   if (mode === "daily") {
