@@ -816,6 +816,10 @@ runtime и statement timeout.
 
 Ежедневно в 05:00 UTC через `refresh_article_product_cache()`.
 
+Cron-сессия получает отдельный `statement_timeout = '10min'`: полный кеш
+всех SEO-кластеров уже не помещается в общий двухминутный лимит проекта.
+Расписание и сама функция пересчёта при этом не меняются.
+
 ---
 
 ## refresh-product-card-seo-blocks-daily
