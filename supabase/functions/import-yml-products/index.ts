@@ -353,6 +353,11 @@ serve(async () => {
 
     if (productEntitiesError) throw productEntitiesError;
 
+    const { data: newYearEntitiesData, error: newYearEntitiesError } =
+      await supabase.rpc("refresh_product_new_year_entities");
+
+    if (newYearEntitiesError) throw newYearEntitiesError;
+
     // Product recommendations are intentionally rebuilt by the dedicated
     // nightly cron after product/article imports and article classification.
     // Keeping this import lightweight prevents duplicate cache rebuilds and
@@ -386,6 +391,7 @@ serve(async () => {
           ingredients_inserted: ingredientsInserted,
           deactivated,
           product_seo_entities: productEntitiesData,
+          product_new_year_entities: newYearEntitiesData,
           article_product_cache: articleProductCacheData,
         },
       }).eq("id", jobLogId);
@@ -397,6 +403,7 @@ serve(async () => {
       sourceCount: sourceProductKeys.size,
       imported,
       productSeoEntities: productEntitiesData,
+      productNewYearEntities: newYearEntitiesData,
       articleProductCache: articleProductCacheData,
       ingredientsInserted,
       deactivated,

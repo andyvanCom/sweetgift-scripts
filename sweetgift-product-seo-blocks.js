@@ -13,10 +13,10 @@ SweetGift.ru | Product SEO Blocks
 
   window.SG = window.SG || {};
 
-  var VERSION = '2';
+  var VERSION = '3';
   var CSS_ID = 'sg-product-seo-blocks-css';
   var ROOT_SELECTOR = '.sg-product-seo-blocks';
-  var CACHE_PREFIX = 'sg_product_seo_v2_';
+  var CACHE_PREFIX = 'sg_product_seo_v3_';
   var CACHE_TTL = 7 * 24 * 60 * 60 * 1000;
 
   window.SG.productSeoBlocks = {

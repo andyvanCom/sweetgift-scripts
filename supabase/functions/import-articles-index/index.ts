@@ -15,6 +15,10 @@ type FeedItem = {
   lastmod: string | null;
 };
 
+const NEW_YEAR_ARTICLE_ALIASES = new Set(`
+novyy-god-zhenshchiny podarki-na-novyy-god novyy-god-vybiray muzhchina-na-novyy-god kupit-rozhdestvenskie novym-godom-drug-drugom novyy-god-s-drugom novym-godom-muzh devushka-novaya-godom novym-godom-sotrudnikov mamam-na-novyy-god novyy-god-syna s-novym-godom-mamy uchitel-novyy-god muzh-na-novyy-god direktor-novyy-god nabory-novyy-god devochki-na-novyy-god drug-na-novyy-god roditelya-na-novyy-god paren-novyy-god novogodniy-podarok-druzyam novyy-god-byvshiy-muzh novyy-god-klienty novyy-god-podruga pozdravlyayu-s-dnem-novym-godom rozhdestvo-s-drugom idei-na-novye-god papy-na-novyy-god mama-syn-novyy-god svekrov-novyy-god vrach-novyy-god podarki-novyy-god-byvshemu nabor-na-novyy-god vzroslyh-na-novyy-god s-novym-godom-bratya docheri-na-novyy-god pozdravit-byvshego-s-novym-godom pozdravlyayu-s-novym-godom-rozhdeniya s-novym-godom-byvshemu-muzhchine druzya-rozhdestvo novyy-uchebnyy-god-uchitel idei-dlya-novogo-goda sestry-na-novyy-god na-novyy-god-nedorogoe korporativnye-novogodnie-podarki novym-godom-partnery zakaza-novyy-god k-druzyam-novyy-god dedushka-novyy-god roditeli-roditeley-novogodnie podarki-na-2027 byvshaya-devushka-novyy-god bratu-na-novyy-god buhgalter-novyy-god podarok-byvshey-na-novyy-god mame-k-novomu-godu novogodniy-podarok-sotrudnik s-novym-godom-molodogo-muzhchinu partner-na-novyy-god novym-godom-nachalnika novym-godom-klassnomu-rukovoditelyu novym-godom-vospitateley s-novym-godom-zhizni-lyubimogo novyy-god-s-muzhem-doma zimnee-utro-druzya novyy-god-menedzher lyubimoy-babushke-v-novyy-god rozhdestvo-zhenu rozhdestvo-roditelyam zhene-k-novomu-godu trener-novyy-god s-novym-godom-pozdravit-pervoy pozdravim-godom-i-rozhdestvom syurpriz-na-novyy-god novyy-god-2026-pozdravit tekst-babushke-na-novyy-god muzhu-na-rozhdestvo na-novyy-god-zhenshchinam-muzhchinam novyy-devochke-18-let novogodniy-podarok-tsena novym-godom-uvazhaemye-roditeli dorogaya-mama-s-novym-godom blagodarnost-novyy-god podarki-klientov-na-novyy-god novogodniy-doktor klassnomu-rukovoditelyu-na-novyy-god korporativnye-idei-na-novyy-god rozhdestvenskaya-ideya novogodniy-bolshie-podarki teshcha-na-novyy-god uvazhaemye-pozdravlyaem-s-novym-godom idei-korporativnyh-podarkov-na-novyy-god
+`.trim().split(/\s+/));
+
 class HttpFetchError extends Error {
   status: number;
   url: string;
@@ -160,6 +164,10 @@ function isFruitArticleAlias(alias: string): boolean {
     .test(alias);
 }
 
+function isNewYearArticleAlias(alias: string): boolean {
+  return NEW_YEAR_ARTICLE_ALIASES.has(alias);
+}
+
 function extractSitemapUrls(xml: string): string[] {
   return [...xml.matchAll(/<loc>(.*?)<\/loc>/gi)]
     .map((m) => decodeHtml(m[1]))
@@ -205,12 +213,20 @@ async function fetchText(url: string): Promise<string> {
 
 async function getAllArticleFeedItems(): Promise<FeedItem[]> {
   const rootXml = await fetchText(FEED_URL);
-  const sitemapUrls = extractSitemapUrls(rootXml);
-
+  const pendingSitemaps = extractSitemapUrls(rootXml);
+  const visitedSitemaps = new Set<string>();
   const map = new Map<string, FeedItem>();
 
-  for (const sitemapUrl of sitemapUrls) {
+  while (pendingSitemaps.length) {
+    const sitemapUrl = pendingSitemaps.shift()!;
+    if (visitedSitemaps.has(sitemapUrl)) continue;
+    visitedSitemaps.add(sitemapUrl);
+
     const xml = await fetchText(sitemapUrl);
+
+    for (const nestedUrl of extractSitemapUrls(xml)) {
+      if (!visitedSitemaps.has(nestedUrl)) pendingSitemaps.push(nestedUrl);
+    }
 
     for (const item of extractFeedItems(xml)) {
       map.set(item.url, item);
@@ -615,6 +631,25 @@ async function runImport(
     );
 
     if (fruitFiltersError) throw fruitFiltersError;
+  }
+
+  const newYearArticles = result.items.flatMap((item: any) =>
+    (item.article_product_aliases || [])
+      .filter((alias: string) => isNewYearArticleAlias(alias))
+      .map((alias: string) => ({
+        alias,
+        title: item.title,
+        url: item.url,
+      }))
+  );
+
+  if (newYearArticles.length) {
+    const { error: newYearFiltersError } = await supabaseAdmin.rpc(
+      "sync_new_year_article_filters",
+      { p_articles: newYearArticles },
+    );
+
+    if (newYearFiltersError) throw newYearFiltersError;
   }
 
   if (mode === "daily") {
