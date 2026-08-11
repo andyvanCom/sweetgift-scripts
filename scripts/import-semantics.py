@@ -23,7 +23,7 @@ from xml.etree import ElementTree as ET
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SUPPORTED_SUFFIXES = {".xlsx", ".csv", ".tsv"}
+SUPPORTED_SUFFIXES = {".xlsx", ".csv", ".tsv", ".txt"}
 QUERY_ALIASES = {
     "query",
     "query text",
@@ -173,7 +173,7 @@ def read_xlsx(path: Path) -> list[tuple[str, list[list[str]]]]:
 
 def read_delimited(path: Path) -> list[tuple[str, list[list[str]]]]:
     text = path.read_text(encoding="utf-8-sig")
-    delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
+    delimiter = "\t" if path.suffix.lower() in {".tsv", ".txt"} else ","
     if path.suffix.lower() == ".csv":
         try:
             delimiter = csv.Sniffer().sniff(text[:4096], delimiters=",;\t").delimiter
@@ -233,6 +233,10 @@ def parse_rows(
     for source_index, row in enumerate(rows[header_row + 1 :], start=header_row + 2):
         query = normalize_text(row[query_column] if query_column < len(row) else "")
         group = normalize_text(row[group_column] if group_column < len(row) else "")
+        # Some exports append a clearly marked, ungrouped draft section after
+        # the curated table. It is not ready for semantic-core import.
+        if query.casefold().startswith("ниже не сгруппировано") and not group:
+            break
         if not query and not group:
             empty_rows += 1
             continue

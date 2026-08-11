@@ -19,6 +19,10 @@ const NEW_YEAR_ARTICLE_ALIASES = new Set(`
 novyy-god-zhenshchiny podarki-na-novyy-god novyy-god-vybiray muzhchina-na-novyy-god kupit-rozhdestvenskie novym-godom-drug-drugom novyy-god-s-drugom novym-godom-muzh devushka-novaya-godom novym-godom-sotrudnikov mamam-na-novyy-god novyy-god-syna s-novym-godom-mamy uchitel-novyy-god muzh-na-novyy-god direktor-novyy-god nabory-novyy-god devochki-na-novyy-god drug-na-novyy-god roditelya-na-novyy-god paren-novyy-god novogodniy-podarok-druzyam novyy-god-byvshiy-muzh novyy-god-klienty novyy-god-podruga pozdravlyayu-s-dnem-novym-godom rozhdestvo-s-drugom idei-na-novye-god papy-na-novyy-god mama-syn-novyy-god svekrov-novyy-god vrach-novyy-god podarki-novyy-god-byvshemu nabor-na-novyy-god vzroslyh-na-novyy-god s-novym-godom-bratya docheri-na-novyy-god pozdravit-byvshego-s-novym-godom pozdravlyayu-s-novym-godom-rozhdeniya s-novym-godom-byvshemu-muzhchine druzya-rozhdestvo novyy-uchebnyy-god-uchitel idei-dlya-novogo-goda sestry-na-novyy-god na-novyy-god-nedorogoe korporativnye-novogodnie-podarki novym-godom-partnery zakaza-novyy-god k-druzyam-novyy-god dedushka-novyy-god roditeli-roditeley-novogodnie podarki-na-2027 byvshaya-devushka-novyy-god bratu-na-novyy-god buhgalter-novyy-god podarok-byvshey-na-novyy-god mame-k-novomu-godu novogodniy-podarok-sotrudnik s-novym-godom-molodogo-muzhchinu partner-na-novyy-god novym-godom-nachalnika novym-godom-klassnomu-rukovoditelyu novym-godom-vospitateley s-novym-godom-zhizni-lyubimogo novyy-god-s-muzhem-doma zimnee-utro-druzya novyy-god-menedzher lyubimoy-babushke-v-novyy-god rozhdestvo-zhenu rozhdestvo-roditelyam zhene-k-novomu-godu trener-novyy-god s-novym-godom-pozdravit-pervoy pozdravim-godom-i-rozhdestvom syurpriz-na-novyy-god novyy-god-2026-pozdravit tekst-babushke-na-novyy-god muzhu-na-rozhdestvo na-novyy-god-zhenshchinam-muzhchinam novyy-devochke-18-let novogodniy-podarok-tsena novym-godom-uvazhaemye-roditeli dorogaya-mama-s-novym-godom blagodarnost-novyy-god podarki-klientov-na-novyy-god novogodniy-doktor klassnomu-rukovoditelyu-na-novyy-god korporativnye-idei-na-novyy-god rozhdestvenskaya-ideya novogodniy-bolshie-podarki teshcha-na-novyy-god uvazhaemye-pozdravlyaem-s-novym-godom idei-korporativnyh-podarkov-na-novyy-god
 `.trim().split(/\s+/));
 
+const GIFT_IDEA_ARTICLE_ALIASES = new Set(`
+85-chto-podarit blagodarnost-babushke blagodarnost-docheri blagodarnost-kollege blagodarnost-rukovoditelyu blagodarnost-vrachu blagodarnost-za-operatsiyu blagodarnost-za-rabotu blagodarnost-zhenshchine chto-muzhu-podarit-zhene chto-podarit chto-podarit-19 chto-podarit-30 chto-podarit-50 chto-podarit-55 chto-podarit-8 chto-podarit-babushke-i-dedushke chto-podarit-babushke-na-70 chto-podarit-byvshemu-na-den-rozhdeniya chto-podarit-byvshey chto-podarit-dedushke chto-podarit-derevyannoe chto-podarit-devushke-na-god chto-podarit-dorogo chto-podarit-kollege-zhenshchine chto-podarit-krestnoy chto-podarit-lyubimomu-cheloveku chto-podarit-mame chto-podarit-mame-8 chto-podarit-mame-na-50 chto-podarit-mame-na-60 chto-podarit-mame-na-65 chto-podarit-mame-na-yubiley chto-podarit-mame-ot-syna chto-podarit-muzhchine chto-podarit-muzhchine-na-35 chto-podarit-muzhchine-na-50 chto-podarit-muzhchine-na-55 chto-podarit-muzhchine-na-70 chto-podarit-muzhchine-na-yubiley chto-podarit-muzhchine-nedorogo chto-podarit-muzhu chto-podarit-muzhu-na-let chto-podarit-na-10-svadby chto-podarit-na-18 chto-podarit-na-21 chto-podarit-na-40 chto-podarit-na-45 chto-podarit-na-60 chto-podarit-na-den chto-podarit-na-god-svadby chto-podarit-na-godovshchinu chto-podarit-na-novosele chto-podarit-na-rozhdenie-devochki chto-podarit-na-rozhdenie-malchika chto-podarit-na-serebryanuyu chto-podarit-na-svidanii chto-podarit-na-yubiley chto-podarit-nedorogoe chto-podarit-ochen chto-podarit-ottsu-na-den chto-podarit-pape chto-podarit-pape-na-50 chto-podarit-pape-na-den chto-podarit-pape-na-yubiley chto-podarit-pape-ot-dochki chto-podarit-parnyu chto-podarit-parnyu-na-18 chto-podarit-parnyu-na-god chto-podarit-podruge chto-podarit-posle chto-podarit-pozhilym chto-podarit-prosto-tak chto-podarit-roditelyam-na-god chto-podarit-rozhdeniya-mame chto-podarit-rukovoditelyu chto-podarit-sosedu chto-podarit-starenkoy-mame chto-podarit-synu-ottsu chto-podarit-tete chto-podarit-vrachu chto-podarit-zhene-na-godovshchinu chto-podarit-zhene-na-rozhdenie chto-podarit-zhenshchine chto-podarit-zhenshchine-na-55 chto-podarit-zhenshchine-na-80 chto-podarit-zhenshchine-na-yubiley den-blagodarnosti-muzhu govorit-blagodarnosti idei-dlya-dnya-rozhdeniya idei-papa idei-podarkov-na-den-rozhdeniya ideya-pozdravleniya-mame kakoy-luchshiy-podarok-vybrat kakoy-podarok-mozhno-sdelat-mame-prosto-tak podarok-babushke podarok-babushke-na-65 podarok-babushke-na-8 podarok-drugu-30 podarok-drugu-na-20 podarok-mame-druga podarok-mame-na-novyy-god podarok-mame-podrugi podarok-na-godovshchinu-babushke podarok-novoy-babushke podarok-rukovoditelyu podborka-tovarov pozdravleniya-mamy-s-rozhdeniya-idei slova-blagodarnosti tekst-blagodarnosti
+`.trim().split(/\s+/));
+
 class HttpFetchError extends Error {
   status: number;
   url: string;
@@ -166,6 +170,10 @@ function isFruitArticleAlias(alias: string): boolean {
 
 function isNewYearArticleAlias(alias: string): boolean {
   return NEW_YEAR_ARTICLE_ALIASES.has(alias);
+}
+
+function isGiftIdeaArticleAlias(alias: string): boolean {
+  return GIFT_IDEA_ARTICLE_ALIASES.has(alias);
 }
 
 function extractSitemapUrls(xml: string): string[] {
@@ -631,6 +639,25 @@ async function runImport(
     );
 
     if (fruitFiltersError) throw fruitFiltersError;
+  }
+
+  const giftIdeaArticles = result.items.flatMap((item: any) =>
+    (item.article_product_aliases || [])
+      .filter((alias: string) => isGiftIdeaArticleAlias(alias))
+      .map((alias: string) => ({
+        alias,
+        title: item.title,
+        url: item.url,
+      }))
+  );
+
+  if (giftIdeaArticles.length) {
+    const { error: giftIdeaFiltersError } = await supabaseAdmin.rpc(
+      "sync_gift_idea_article_filters",
+      { p_articles: giftIdeaArticles },
+    );
+
+    if (giftIdeaFiltersError) throw giftIdeaFiltersError;
   }
 
   const newYearArticles = result.items.flatMap((item: any) =>
