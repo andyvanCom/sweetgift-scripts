@@ -75,7 +75,13 @@ function splitIngredients(composition: string | null): string[] {
 
   return composition
     .split(/\n|;|•|—/g)
-    .map((x) => x.replace(/^[-–—\s]+/, "").trim())
+    .map((x) => x
+      .replace(/^[-–—\s]+/, "")
+      // Tilda/YML sometimes stores the whole composition on one line after
+      // this heading. Remove only the heading, not the ingredients following
+      // it (the former filter discarded the complete line).
+      .replace(/^\s*в состав[^:]*:\s*/i, "")
+      .trim())
     .filter((x) => x.length > 2)
     .filter((x) => !/^в состав/i.test(x))
     .filter((x) => !/^дxшxв/i.test(x))
