@@ -23,7 +23,7 @@ begin
       where p.product_key = e.product_key
         and p.available = true
         and lower(concat_ws(' ', p.category_slug, p.title, p.url)) ~
-          'novogod|новогод|rozhdestv|рождеств'
+          'novogod|новогод|rozhdestv|рождеств|ng[-_]?gift[-_]?box'
     );
 
   -- A product explicitly living in a New Year category must not retain the
@@ -35,7 +35,7 @@ begin
     and e.entity_value <> 'новый год'
     and p.available = true
     and lower(concat_ws(' ', p.category_slug, p.title, p.url)) ~
-      'novogod|новогод|rozhdestv|рождеств';
+      'novogod|новогод|rozhdestv|рождеств|ng[-_]?gift[-_]?box';
   get diagnostics v_removed = row_count;
 
   insert into public.product_seo_entities (
@@ -50,7 +50,7 @@ begin
   from public.products_catalog p
   where p.available = true
     and lower(concat_ws(' ', p.category_slug, p.title, p.url)) ~
-      'novogod|новогод|rozhdestv|рождеств'
+      'novogod|новогод|rozhdestv|рождеств|ng[-_]?gift[-_]?box'
   on conflict (product_key, entity_type, entity_value)
   do update set weight = excluded.weight, updated_at = excluded.updated_at;
   get diagnostics v_upserted = row_count;
