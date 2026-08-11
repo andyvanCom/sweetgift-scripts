@@ -151,6 +151,15 @@ function isTeaArticleAlias(alias: string): boolean {
     .test(alias);
 }
 
+function isCaviarArticleAlias(alias: string): boolean {
+  return /(^|-)(ikra|ikroy|ikry)(-|$)/.test(alias);
+}
+
+function isFruitArticleAlias(alias: string): boolean {
+  return /(frukt|abrikos|avokado|ananas|apelsin|arbuz|banan|vinograd|granadilla|granat|greypfrut|grusha|guava|dzhekfrut|inzhir|karambola|kivi|kokos|kumkvat|laym|limon|lichi|longan|mango|mangostin|mandarin|marakuyya|nektarin|papayya|persik|pitahayya|rambutan|sliva|feyhoa|fizalis|hurma|chereshnya|yablok|klubnik|malin|ezhevik|golubik|smorodin|tsitrusov|tropichesk)/
+    .test(alias);
+}
+
 function extractSitemapUrls(xml: string): string[] {
   return [...xml.matchAll(/<loc>(.*?)<\/loc>/gi)]
     .map((m) => decodeHtml(m[1]))
@@ -562,6 +571,50 @@ async function runImport(
     );
 
     if (teaFiltersError) throw teaFiltersError;
+  }
+
+  // Run this after the honey/nut/coffee/tea synchronizers. Combination
+  // articles belong to both clusters, but their final rule must keep caviar
+  // as the mandatory first ingredient group.
+  const caviarArticles = result.items.flatMap((item: any) =>
+    (item.article_product_aliases || [])
+      .filter((alias: string) => isCaviarArticleAlias(alias))
+      .map((alias: string) => ({
+        alias,
+        title: item.title,
+        url: item.url,
+      }))
+  );
+
+  if (caviarArticles.length) {
+    const { error: caviarFiltersError } = await supabaseAdmin.rpc(
+      "sync_caviar_article_filters",
+      { p_articles: caviarArticles },
+    );
+
+    if (caviarFiltersError) throw caviarFiltersError;
+  }
+
+  // Run last: fruit pairings may also be recognized by the honey, nut,
+  // coffee, or tea clusters. Their final rule must keep fresh fruit as the
+  // mandatory first ingredient group.
+  const fruitArticles = result.items.flatMap((item: any) =>
+    (item.article_product_aliases || [])
+      .filter((alias: string) => isFruitArticleAlias(alias))
+      .map((alias: string) => ({
+        alias,
+        title: item.title,
+        url: item.url,
+      }))
+  );
+
+  if (fruitArticles.length) {
+    const { error: fruitFiltersError } = await supabaseAdmin.rpc(
+      "sync_fruit_article_filters",
+      { p_articles: fruitArticles },
+    );
+
+    if (fruitFiltersError) throw fruitFiltersError;
   }
 
   if (mode === "daily") {
