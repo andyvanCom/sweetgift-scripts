@@ -89,7 +89,11 @@ with input as (
       when 'colleague' then c.entities&&array['коллега']
       when 'woman' then c.entities&&array['девушка','жена','мама','бабушка']
       else false end recipient_match,
-    (c.tags&&array['strawberry','raspberry'] or c.entities&&array['клубника в шоколаде','букет из клубники','фруктовая корзина']) perishable
+    (coalesce(c.category_slug,'') in ('fruktovye-korziny','klubnika-v-shokolade','bukety-iz-klubniki')
+      or c.product_key like '/fruktovye-korziny/%'
+      or c.product_key like '/klubnika-v-shokolade/%'
+      or c.product_key like '/bukety-iz-klubniki/%'
+      or c.entities&&array['клубника в шоколаде','букет из клубники','фруктовая корзина']) perishable
   from catalog c cross join input i left join orders o on o.product_key=c.product_key
 ), eligible as (
   select *,
@@ -97,7 +101,9 @@ with input as (
       case when style = 'best' then 0 when style_ok then 20 else 0 end +
       case when timing in ('now','today') and perishable then 10 when timing in ('tomorrow','longer') and not perishable then 10 when timing='unknown' then 5 else 0 end) relevance,
     ln(1+orders)*20 order_signal,ln(1+carts)*15 cart_signal,ln(1+views)*10 view_signal,ln(1+trend)*5 trend_signal
-  from features where budget_ok
+  from features
+  where budget_ok
+    and not (timing in ('tomorrow','longer') and perishable)
 ), scored as (
   select *, relevance + least(order_signal,20)+least(cart_signal,15)+least(view_signal,10)+least(trend_signal,5) score
   from eligible
@@ -114,8 +120,8 @@ with input as (
       case when orders>0 then 'Часто покупают' end,
       case when carts>0 then 'Часто добавляют в корзину' end,
       case when trend>0 then 'Популярен за последнюю неделю' end,
-      case when timing in ('now','today') and perishable then 'Подходит для скорого вручения' end,
-      case when timing in ('tomorrow','longer') and not perishable then 'Более устойчивый вариант для позднего вручения' end
+      case when timing in ('now','today') and perishable then 'Подходит для вручения день в день' end,
+      case when timing in ('tomorrow','longer') and not perishable then 'Подходит для более длительного хранения' end
     ],null))) item,rn from ranked
 )
 select jsonb_build_object('total',(select count(*) from scored),'relaxed',false,
