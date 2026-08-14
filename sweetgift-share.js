@@ -79,12 +79,32 @@ SweetGift.ru | Share Module
 }
 
 .sg-share-menu a{
-  display:block;
+  display:flex;
+  align-items:center;
+  gap:11px;
   padding:11px 16px;
   color:#222;
   text-decoration:none;
   font-size:15px;
 }
+
+.sg-share-channel-icon{
+  display:inline-flex;
+  flex:0 0 28px;
+  width:28px;
+  height:28px;
+  align-items:center;
+  justify-content:center;
+  border-radius:50%;
+  background:#777;
+  color:#fff;
+  font:700 11px/1 Arial,sans-serif;
+}
+.sg-share-channel-telegram{background:#27a7e7}.sg-share-channel-max{background:linear-gradient(135deg,#735cff,#27c4f3)}
+.sg-share-channel-vk{background:#2787f5}.sg-share-channel-whatsapp{background:#25d366}
+.sg-share-channel-ok{background:#ee8208}.sg-share-channel-viber{background:#7360f2}
+.sg-share-channel-facebook{background:#1877f2}.sg-share-channel-x{background:#111}
+.sg-share-channel-email{background:#6b7280}.sg-share-channel-copy{background:#a9284d}
 
 .sg-share-menu a:hover{
   background:#f7f7f7;
@@ -115,13 +135,19 @@ SweetGift.ru | Share Module
       whatsapp: 'WhatsApp',
       vk: 'ВКонтакте',
       max: 'MAX',
+      ok: 'Одноклассники',
+      viber: 'Viber',
+      facebook: 'Facebook',
+      x: 'X',
+      email: 'Электронная почта',
       copy: 'Скопировать ссылку'
     };
+    var marks = {telegram:'TG',whatsapp:'WA',vk:'VK',max:'M',ok:'OK',viber:'V',facebook:'f',x:'X',email:'✉',copy:'⧉'};
     var channels = options.channels || ['telegram', 'whatsapp', 'vk', 'max', 'copy'];
     var menu = channels.filter(function (channel) {
       return labels[channel];
     }).map(function (channel) {
-      return '<a href="#" data-sg-share="' + channel + '">' + labels[channel] + '</a>';
+      return '<a href="#" data-sg-share="' + channel + '"><span class="sg-share-channel-icon sg-share-channel-' + channel + '" aria-hidden="true">' + marks[channel] + '</span><span class="sg-share-label">' + labels[channel] + '</span></a>';
     }).join('');
 
     box.innerHTML = `
@@ -186,16 +212,47 @@ SweetGift.ru | Share Module
       return;
     }
 
+    if (channel === 'ok') {
+      window.open('https://connect.ok.ru/offer?url=' + url + '&title=' + title, '_blank');
+      if (typeof options.onShare === 'function') options.onShare(channel);
+      return;
+    }
+
+    if (channel === 'viber') {
+      window.location.href = 'viber://forward?text=' + title + '%20' + url;
+      if (typeof options.onShare === 'function') options.onShare(channel);
+      return;
+    }
+
+    if (channel === 'facebook') {
+      window.open('https://www.facebook.com/sharer/sharer.php?u=' + url, '_blank');
+      if (typeof options.onShare === 'function') options.onShare(channel);
+      return;
+    }
+
+    if (channel === 'x') {
+      window.open('https://twitter.com/intent/tweet?url=' + url + '&text=' + title, '_blank');
+      if (typeof options.onShare === 'function') options.onShare(channel);
+      return;
+    }
+
+    if (channel === 'email') {
+      window.location.href = 'mailto:?subject=' + title + '&body=' + title + '%0A' + url;
+      if (typeof options.onShare === 'function') options.onShare(channel);
+      return;
+    }
+
     if (channel === 'copy') {
       navigator.clipboard.writeText(rawUrl);
       if (typeof options.onShare === 'function') options.onShare(channel);
 
       if (clickedLink) {
-        var oldText = clickedLink.textContent;
-        clickedLink.textContent = 'Ссылка скопирована';
+        var label = clickedLink.querySelector('.sg-share-label') || clickedLink;
+        var oldText = label.textContent;
+        label.textContent = 'Ссылка скопирована';
 
         setTimeout(function () {
-          clickedLink.textContent = oldText;
+          label.textContent = oldText;
         }, 1500);
       }
     }
