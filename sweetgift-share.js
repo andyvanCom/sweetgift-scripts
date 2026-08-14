@@ -110,6 +110,20 @@ SweetGift.ru | Share Module
     var box = document.createElement('div');
     box.className = options.className || 'sg-share-box';
 
+    var labels = {
+      telegram: 'Telegram',
+      whatsapp: 'WhatsApp',
+      vk: 'ВКонтакте',
+      max: 'MAX',
+      copy: 'Скопировать ссылку'
+    };
+    var channels = options.channels || ['telegram', 'whatsapp', 'vk', 'max', 'copy'];
+    var menu = channels.filter(function (channel) {
+      return labels[channel];
+    }).map(function (channel) {
+      return '<a href="#" data-sg-share="' + channel + '">' + labels[channel] + '</a>';
+    }).join('');
+
     box.innerHTML = `
       <button class="sg-share-main" type="button">
         <img src="${SHARE_ICON_URL}" class="sg-share-icon" alt="Поделиться">
@@ -117,11 +131,7 @@ SweetGift.ru | Share Module
       </button>
 
       <div class="sg-share-menu">
-        <a href="#" data-sg-share="telegram">Telegram</a>
-        <a href="#" data-sg-share="whatsapp">WhatsApp</a>
-        <a href="#" data-sg-share="vk">ВКонтакте</a>
-        <a href="#" data-sg-share="max">MAX</a>
-        <a href="#" data-sg-share="copy">Скопировать ссылку</a>
+        ${menu}
       </div>
     `;
 
@@ -139,6 +149,7 @@ SweetGift.ru | Share Module
         text: options.text || options.title || document.title || '',
         url: options.url || window.location.href
       });
+      if (typeof options.onShare === 'function') options.onShare('native');
     } catch (e) {}
   }
 
@@ -153,26 +164,31 @@ SweetGift.ru | Share Module
 
     if (channel === 'telegram') {
       window.open('https://t.me/share/url?url=' + url + '&text=' + title, '_blank');
+      if (typeof options.onShare === 'function') options.onShare(channel);
       return;
     }
 
     if (channel === 'whatsapp') {
       window.open('https://wa.me/?text=' + title + '%20' + url, '_blank');
+      if (typeof options.onShare === 'function') options.onShare(channel);
       return;
     }
 
     if (channel === 'vk') {
       window.open('https://vk.com/share.php?url=' + url, '_blank');
+      if (typeof options.onShare === 'function') options.onShare(channel);
       return;
     }
 
     if (channel === 'max') {
+      if (typeof options.onShare === 'function') options.onShare(channel);
       window.location.href = 'max://send?text=' + url;
       return;
     }
 
     if (channel === 'copy') {
       navigator.clipboard.writeText(rawUrl);
+      if (typeof options.onShare === 'function') options.onShare(channel);
 
       if (clickedLink) {
         var oldText = clickedLink.textContent;
