@@ -225,7 +225,9 @@ serve(async () => {
     let ingredientsInserted = 0;
     let deactivated = 0;
     const sourceProductKeys = new Set<string>();
+    const sourceVariantKeys = new Set<string>();
     const productRowsByKey = new Map<string, Record<string, unknown>>();
+    const variantRowsByKey = new Map<string, Record<string, unknown>>();
     const ingredientRowsByKey = new Map<string, Record<string, unknown>[]>();
 
     for (const offer of offers) {
@@ -253,6 +255,36 @@ serve(async () => {
         raw: offer,
         updated_at: new Date().toISOString(),
       });
+
+      const editionUid = text(offer.id) || (() => {
+        try {
+          return url ? new URL(url).searchParams.get("editionuid") : null;
+        } catch {
+          return null;
+        }
+      })();
+      if (editionUid) {
+        const variantKey = `${productKey}::${editionUid}`;
+        const option = arr(offer.param)[0] as Record<string, unknown> | undefined;
+        sourceVariantKeys.add(variantKey);
+        variantRowsByKey.set(variantKey, {
+          variant_key: variantKey,
+          product_key: productKey,
+          edition_uid: editionUid,
+          group_id: text(offer.group_id),
+          option_name: text(option?.name),
+          option_value: text(option?._text),
+          title: text(offer.name) || text(offer.model) || text(offer.vendorCode),
+          url,
+          image: pictures[0] || null,
+          images: pictures,
+          price: offer.price ? Number(String(offer.price).replace(",", ".")) : null,
+          old_price: offer.oldprice ? Number(String(offer.oldprice).replace(",", ".")) : null,
+          available: String(offer.available ?? "true") !== "false",
+          raw: offer,
+          updated_at: new Date().toISOString(),
+        });
+      }
 
       const ingredients = splitIngredients(composition);
 
@@ -292,6 +324,7 @@ serve(async () => {
     }
 
     const productRows = Array.from(productRowsByKey.values());
+    const variantRows = Array.from(variantRowsByKey.values());
     const allIngredientRows = Array.from(ingredientRowsByKey.values()).flat();
 
     // The old implementation performed an upsert, delete and insert for every
@@ -304,6 +337,33 @@ serve(async () => {
 
       if (upsertError) throw upsertError;
       imported += batch.length;
+    }
+
+    for (const batch of chunks(variantRows, PRODUCT_BATCH_SIZE)) {
+      const { error: variantUpsertError } = await supabase
+        .from("product_variants")
+        .upsert(batch, { onConflict: "variant_key" });
+
+      if (variantUpsertError) throw variantUpsertError;
+    }
+
+    const { data: existingVariants, error: existingVariantsError } = await supabase
+      .from("product_variants")
+      .select("variant_key,available");
+
+    if (existingVariantsError) throw existingVariantsError;
+
+    const missingVariantKeys = (existingVariants || [])
+      .filter((row) => row.available !== false && !sourceVariantKeys.has(String(row.variant_key)))
+      .map((row) => String(row.variant_key));
+
+    for (const variantKeys of chunks(missingVariantKeys, PRODUCT_BATCH_SIZE)) {
+      const { error: deactivateVariantsError } = await supabase
+        .from("product_variants")
+        .update({ available: false, updated_at: new Date().toISOString() })
+        .in("variant_key", variantKeys);
+
+      if (deactivateVariantsError) throw deactivateVariantsError;
     }
 
     for (const productKeys of chunks(Array.from(sourceProductKeys), PRODUCT_BATCH_SIZE)) {
