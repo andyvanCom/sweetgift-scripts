@@ -21,13 +21,13 @@ const json = (data: unknown, status = 200) =>
     },
   });
 
-async function authorized(req: Request) {
+async function adminUser(req: Request) {
   const authorization = req.headers.get("authorization") || "";
   const token = authorization.replace(/^Bearer\s+/i, "").trim();
-  if (!token) return false;
+  if (!token) return null;
 
   const { data, error } = await supabase.auth.getUser(token);
-  return !error && data.user?.app_metadata?.role === "admin";
+  return !error && data.user?.app_metadata?.role === "admin" ? data.user : null;
 }
 
 function num(value: unknown) {
@@ -230,16 +230,95 @@ async function runAction(action: string) {
   );
 }
 
+function parseCsv(source: string) {
+  const rows: string[][] = [];
+  let row: string[] = [], cell = "", quoted = false;
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    if (quoted) {
+      if (char === '"' && source[i + 1] === '"') { cell += '"'; i++; }
+      else if (char === '"') quoted = false;
+      else cell += char;
+    } else if (char === '"') quoted = true;
+    else if (char === ';') { row.push(cell); cell = ""; }
+    else if (char === '\n') { row.push(cell.replace(/\r$/, "")); rows.push(row); row = []; cell = ""; }
+    else cell += char;
+  }
+  if (cell || row.length) { row.push(cell.replace(/\r$/, "")); rows.push(row); }
+  return rows;
+}
+
+const decimal = (value: unknown) => {
+  const raw = String(value || "").trim().replace(/\s/g, "").replace(",", ".");
+  if (!raw) return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const batches = <T>(items: T[], size = 200) => {
+  const result: T[][] = [];
+  for (let i = 0; i < items.length; i += size) result.push(items.slice(i, i + size));
+  return result;
+};
+
+async function importTildaCsv(file: File, importedBy: string) {
+  if (!/\.csv$/i.test(file.name)) throw new Error("Нужен CSV-файл из каталога Tilda");
+  if (file.size > 50 * 1024 * 1024) throw new Error("CSV больше 50 МБ");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const source = new TextDecoder("utf-8").decode(bytes).replace(/^\uFEFF/, "");
+  const parsed = parseCsv(source);
+  const headers = parsed.shift() || [];
+  for (const required of ["Tilda UID", "Title", "Quantity", "Editions", "Modifications", "Url"]) {
+    if (!headers.includes(required)) throw new Error(`В CSV нет обязательной колонки «${required}»`);
+  }
+  const records = parsed.filter(row => row.some(Boolean)).map(row => Object.fromEntries(headers.map((key, index) => [key, row[index] || ""])));
+  const rows = records.filter(record => String(record["Tilda UID"] || "").trim()).map(record => {
+    const quantityRaw = String(record.Quantity || "").trim();
+    return {
+      tilda_uid:String(record["Tilda UID"]).trim(), parent_uid:String(record["Parent UID"] || "").trim() || null,
+      external_id:String(record["External ID"] || "").trim() || null, sku:String(record.SKU || "").trim() || null,
+      brand:String(record.Brand || "").trim() || null, category:String(record.Category || "").trim() || null,
+      title:String(record.Title || "").trim(), description:String(record.Description || "").trim() || null,
+      product_text:String(record.Text || "").trim() || null,
+      photos:String(record.Photo || "").trim().split(/\s+/).filter(Boolean), price:decimal(record.Price), old_price:decimal(record["Price Old"]),
+      quantity:decimal(quantityRaw), unlimited:quantityRaw === "", editions:String(record.Editions || "").trim() || null,
+      modifications:String(record.Modifications || "").replace(/С Праздником \+200=\+\d+/gi, "С Праздником +200=+200").trim() || null,
+      weight:decimal(record.Weight), length:decimal(record.Length), width:decimal(record.Width), height:decimal(record.Height),
+      url:String(record.Url || "").trim() || null, raw:record, active:true, imported_at:new Date().toISOString(),
+    };
+  });
+  if (!rows.length) throw new Error("CSV не содержит товаров");
+  const digest = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))).map(value => value.toString(16).padStart(2, "0")).join("");
+  const { data: importRow, error: importError } = await supabase.from("tilda_catalog_csv_imports").insert({filename:file.name,file_sha256:digest,row_count:rows.length,imported_by:importedBy,details:{base_products:rows.filter(row=>!row.parent_uid).length,variants:rows.filter(row=>row.parent_uid).length,unlimited:rows.filter(row=>row.unlimited).length,with_modifications:rows.filter(row=>row.modifications).length}}).select("id").single();
+  if (importError) throw importError;
+  const importId = importRow.id;
+  for (const batch of batches(rows.map(row => ({...row,import_id:importId})))) {
+    const { error } = await supabase.from("tilda_catalog_csv_rows").upsert(batch,{onConflict:"tilda_uid"});
+    if (error) throw error;
+  }
+  const { data: existing, error: existingError } = await supabase.from("tilda_catalog_csv_rows").select("tilda_uid,active");
+  if (existingError) throw existingError;
+  const current = new Set(rows.map(row => row.tilda_uid));
+  const removed = (existing || []).filter(row => row.active !== false && !current.has(String(row.tilda_uid))).map(row => String(row.tilda_uid));
+  for (const batch of batches(removed)) {
+    const { error } = await supabase.from("tilda_catalog_csv_rows").update({active:false,import_id:importId,imported_at:new Date().toISOString()}).in("tilda_uid",batch);
+    if (error) throw error;
+  }
+  await supabase.from("system_job_logs").insert({job_name:"import-tilda-csv",started_at:new Date().toISOString(),finished_at:new Date().toISOString(),status:"success",processed_count:rows.length,details:{import_id:importId,filename:file.name,removed,base_products:rows.filter(row=>!row.parent_uid).length,variants:rows.filter(row=>row.parent_uid).length,unlimited:rows.filter(row=>row.unlimited).length,with_modifications:rows.filter(row=>row.modifications).length}});
+  return {ok:true,importId,filename:file.name,rows:rows.length,baseProducts:rows.filter(row=>!row.parent_uid).length,variants:rows.filter(row=>row.parent_uid).length,unlimited:rows.filter(row=>row.unlimited).length,withModifications:rows.filter(row=>row.modifications).length,removed:removed.length};
+}
+
 const HTML = `<!doctype html><html lang="ru"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>SweetGift Admin</title>
 <style>
-:root{--ink:#261d1f;--muted:#786b6e;--line:#eadfdd;--red:#a9284d;--red2:#d85c7b;--ok:#24835d;--bad:#c04444;--shadow:0 14px 40px #43202914}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(145deg,#fff8f3,#f5eff1 55%,#f7eee9);color:var(--ink);font:15px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit}.wrap{max-width:1240px;margin:auto;padding:28px 20px 60px}.top,.brand,.toolbar{display:flex;align-items:center}.top{justify-content:space-between;gap:16px;margin-bottom:22px}.brand{gap:12px}.logo{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;color:#fff;font-size:21px;font-weight:800;background:linear-gradient(135deg,var(--red),var(--red2));box-shadow:var(--shadow)}h1,h2{margin:0}h1{font-size:25px}.sub{color:var(--muted);font-size:13px}.card,.login{background:#fffffff0;border:1px solid var(--line);border-radius:19px;box-shadow:var(--shadow)}.login{max-width:440px;margin:12vh auto;padding:30px}.field,.toolbar{gap:9px}.field{display:flex;margin-top:18px}.field input{min-width:0;flex:1;border:1px solid var(--line);border-radius:12px;padding:12px}.btn{border:0;border-radius:12px;padding:11px 14px;background:var(--red);color:white;font-weight:650;cursor:pointer}.btn:disabled{opacity:.55;cursor:wait}.btn.alt{background:#f1e7e6;color:var(--ink)}.btn.warn{background:#852e43}.toolbar{flex-wrap:wrap}.toolbar select{border:1px solid var(--line);border-radius:12px;background:white;padding:10px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.metric,.card{padding:18px}.metric b{display:block;font-size:27px;margin-top:4px}.section{margin-top:18px}.section h2{font-size:18px;margin-bottom:11px}.actions{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.action{text-align:left}.action small{display:block;font-weight:400;opacity:.82;margin-top:3px}.cols{display:grid;grid-template-columns:1.2fr .8fr;gap:15px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid var(--line);font-size:13px}th{color:var(--muted)}.status{display:inline-flex;align-items:center;gap:6px}.dot{width:8px;height:8px;border-radius:50%;background:var(--bad)}.success .dot{background:var(--ok)}.barrow{display:grid;grid-template-columns:minmax(95px,1fr) 2fr 42px;gap:9px;align-items:center;margin:9px 0}.barname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar{height:9px;background:#f1e7e6;border-radius:10px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--red),var(--red2))}.report,.result{white-space:pre-wrap;overflow:auto;border-radius:14px;padding:15px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}.report{max-height:410px;background:#2c2426;color:#fff8f5}.result{margin-top:11px;max-height:210px;background:#f7efed}.error{color:var(--bad);margin-top:12px}.hidden{display:none!important}@media(max-width:880px){.grid{grid-template-columns:repeat(2,1fr)}.cols{grid-template-columns:1fr}.actions{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.wrap{padding:16px 11px 40px}.top{align-items:flex-start;flex-direction:column}.actions{grid-template-columns:1fr}.field{flex-direction:column}.metric b{font-size:22px}}
+:root{--ink:#261d1f;--muted:#786b6e;--line:#eadfdd;--red:#a9284d;--red2:#d85c7b;--ok:#24835d;--bad:#c04444;--shadow:0 14px 40px #43202914}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(145deg,#fff8f3,#f5eff1 55%,#f7eee9);color:var(--ink);font:15px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit}.wrap{max-width:1240px;margin:auto;padding:28px 20px 60px}.top,.brand,.toolbar{display:flex;align-items:center}.top{justify-content:space-between;gap:16px;margin-bottom:22px}.brand{gap:12px}.logo{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;color:#fff;font-size:21px;font-weight:800;background:linear-gradient(135deg,var(--red),var(--red2));box-shadow:var(--shadow)}h1,h2{margin:0}h1{font-size:25px}.sub{color:var(--muted);font-size:13px}.card,.login{background:#fffffff0;border:1px solid var(--line);border-radius:19px;box-shadow:var(--shadow)}.login{max-width:440px;margin:12vh auto;padding:30px}.field,.toolbar{gap:9px}.field{display:flex;margin-top:18px}.field input{min-width:0;flex:1;border:1px solid var(--line);border-radius:12px;padding:12px}.btn{border:0;border-radius:12px;padding:11px 14px;background:var(--red);color:white;font-weight:650;cursor:pointer}.btn:disabled{opacity:.55;cursor:wait}.btn.alt{background:#f1e7e6;color:var(--ink)}.btn.warn{background:#852e43}.toolbar{flex-wrap:wrap}.toolbar select{border:1px solid var(--line);border-radius:12px;background:white;padding:10px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.metric,.card{padding:18px}.metric b{display:block;font-size:27px;margin-top:4px}.section{margin-top:18px}.section h2{font-size:18px;margin-bottom:11px}.actions{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.action{text-align:left}.action small{display:block;font-weight:400;opacity:.82;margin-top:3px}.upload{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.upload input{flex:1;min-width:240px;border:1px dashed var(--line);border-radius:12px;padding:10px;background:white}.cols{display:grid;grid-template-columns:1.2fr .8fr;gap:15px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid var(--line);font-size:13px}th{color:var(--muted)}.status{display:inline-flex;align-items:center;gap:6px}.dot{width:8px;height:8px;border-radius:50%;background:var(--bad)}.success .dot{background:var(--ok)}.barrow{display:grid;grid-template-columns:minmax(95px,1fr) 2fr 42px;gap:9px;align-items:center;margin:9px 0}.barname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar{height:9px;background:#f1e7e6;border-radius:10px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--red),var(--red2))}.report,.result{white-space:pre-wrap;overflow:auto;border-radius:14px;padding:15px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}.report{max-height:410px;background:#2c2426;color:#fff8f5}.result{margin-top:11px;max-height:210px;background:#f7efed}.error{color:var(--bad);margin-top:12px}.hidden{display:none!important}@media(max-width:880px){.grid{grid-template-columns:repeat(2,1fr)}.cols{grid-template-columns:1fr}.actions{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.wrap{padding:16px 11px 40px}.top{align-items:flex-start;flex-direction:column}.actions{grid-template-columns:1fr}.field{flex-direction:column}.metric b{font-size:22px}}
 </style></head><body>
 <div id="login" class="login"><div class="brand"><div class="logo">S</div><div><h2>SweetGift Admin</h2><div class="sub">Аналитика и управление обработкой</div></div></div><p>Войдите под учётной записью администратора.</p><form id="loginForm"><div class="field"><input id="email" type="email" autocomplete="username" placeholder="Email" required></div><div class="field"><input id="password" type="password" autocomplete="current-password" placeholder="Пароль" required><button class="btn">Войти</button></div></form><div id="loginError" class="error"></div></div>
 <main id="app" class="wrap hidden"><header class="top"><div class="brand"><div class="logo">S</div><div><h1>SweetGift</h1><div class="sub">Заказы и ночная обработка</div></div></div><div class="toolbar"><select id="period"><option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">90 дней</option></select><button id="refresh" class="btn alt">Обновить</button><button id="logout" class="btn alt">Выйти</button></div></header>
 <section id="metrics" class="grid"></section>
 <section class="section"><h2>Управление pipeline</h2><div class="card"><div class="actions"><button class="btn action" data-action="products">Импорт товаров<small>YML, сущности и подборки</small></button><button class="btn action" data-action="articles">Импорт статей<small>Sitemap и индекс</small></button><button class="btn action" data-action="classify">Классификация<small>Темы и сущности</small></button><button class="btn action" data-action="articleProducts">Пересчитать подборки<small>Запустить в фоне без таймаута</small></button><button class="btn warn action" data-action="report">Отправить отчёт<small>Письмо прямо сейчас</small></button></div><div id="actionResult" class="result hidden"></div></div></section>
+<section class="section"><h2>Полный каталог Tilda</h2><div class="card"><form id="csvForm" class="upload"><input id="csvFile" type="file" accept=".csv,text/csv" required><button id="csvButton" class="btn">Загрузить CSV</button></form><div class="sub" style="margin-top:8px">Пустой Quantity считается неограниченным остатком (∞). Файл доступен только администратору.</div><div id="csvResult" class="result hidden"></div></div></section>
 <section class="section cols"><div><h2>Состояние обработки</h2><div class="card"><table><thead><tr><th>Этап</th><th>Статус</th><th>Обработано</th><th>Завершён</th></tr></thead><tbody id="jobs"></tbody></table></div></div><div><h2>Заказы по дням</h2><div id="daily" class="card"></div></div></section>
 <section class="section cols"><div><h2>Популярные товары</h2><div id="products" class="card"></div></div><div><h2>Категории</h2><div id="categories" class="card"></div></div></section>
 <section class="section cols"><div><h2>Последние заказы</h2><div class="card"><table><thead><tr><th>Заказ</th><th>Дата</th><th>Позиций</th><th>Сумма</th></tr></thead><tbody id="orders"></tbody></table></div></div><div><h2>Ежедневный отчёт</h2><div id="report" class="report"></div></div></section>
@@ -248,12 +327,13 @@ const AUTH_URL="${SUPABASE_URL}/auth/v1",AUTH_KEY="${PUBLISHABLE_KEY}",ADMIN_URL
 function saveSession(value){state.session=value;if(value)localStorage.setItem("sg_admin_session",JSON.stringify(value));else localStorage.removeItem("sg_admin_session")}
 async function authRequest(grant,body){const r=await fetch(AUTH_URL+"/token?grant_type="+grant,{method:"POST",headers:{"apikey":AUTH_KEY,"content-type":"application/json"},body:JSON.stringify(body)}),data=await r.json();if(!r.ok)throw new Error(data.error_description||data.msg||"Ошибка входа");data.expires_at=Math.floor(Date.now()/1000)+(data.expires_in||3600);saveSession(data);return data}
 async function ensureSession(){if(!state.session)throw new Error("Требуется вход");if((state.session.expires_at||0)>Math.floor(Date.now()/1000)+60)return state.session;return await authRequest("refresh_token",{refresh_token:state.session.refresh_token})}
-async function api(path,options={}){const session=await ensureSession(),r=await fetch(ADMIN_URL+"/"+path,{...options,headers:{...(options.headers||{}),"authorization":"Bearer "+session.access_token,"content-type":"application/json"}}),b=await r.json();if(!r.ok)throw new Error(b.error||"Ошибка запроса");return b}
+async function api(path,options={}){const session=await ensureSession(),headers={...(options.headers||{}),"authorization":"Bearer "+session.access_token};if(!(options.body instanceof FormData))headers["content-type"]="application/json";const r=await fetch(ADMIN_URL+"/"+path,{...options,headers}),b=await r.json();if(!r.ok)throw new Error(b.error||"Ошибка запроса");return b}
 function bars(id,rows,key="name"){const max=Math.max(1,...rows.map(x=>+x.value||0));el(id).innerHTML=rows.length?rows.map(x=>'<div class="barrow"><div class="barname" title="'+esc(x[key])+'">'+esc(x[key])+'</div><div class="bar"><i style="width:'+Math.max(3,(+x.value||0)/max*100)+'%"></i></div><b>'+esc(x.value)+'</b></div>').join(""):'<div class="sub">Пока нет данных</div>'}
 function render(d){const o=d.orders,c=d.article_product_cache||{};el("metrics").innerHTML=[["Заказы",o.total],["Выручка",money(o.revenue)],["Средний чек",money(o.average_check)],["Товаров продано",o.items],["Подарки",o.gifts],["С поздравлением",o.messages],["С промокодом",o.promocodes],["Каталог",d.catalog.products+" / "+d.catalog.articles],["Подборки статей",(c.cached_aliases||0)+" / "+(c.cached_products||0)]].map(x=>'<div class="metric card"><div class="sub">'+esc(x[0])+'</div><b>'+esc(x[1])+'</b></div>').join("");el("jobs").innerHTML=d.pipeline.map(j=>'<tr><td>'+esc(j.job_name)+'</td><td><span class="status '+(j.status==="success"?"success":"")+'"><i class="dot"></i>'+esc(j.status)+'</span></td><td>'+esc(j.processed_count)+'</td><td>'+date(j.finished_at||j.started_at)+'</td></tr>').join("");bars("daily",o.daily,"date");bars("products",o.top_products);bars("categories",o.top_categories);el("orders").innerHTML=o.recent.length?o.recent.map(x=>'<tr><td>…'+esc(x.order_id)+'</td><td>'+date(x.created_at)+'</td><td>'+esc(x.items)+'</td><td>'+money(x.total)+'</td></tr>').join(""):'<tr><td colspan="4" class="sub">Заказов за период нет</td></tr>';el("report").textContent=d.report}
 async function load(){el("refresh").disabled=true;try{render(await api("api/dashboard?days="+el("period").value));el("login").classList.add("hidden");el("app").classList.remove("hidden")}finally{el("refresh").disabled=false}}
 el("loginForm").addEventListener("submit",async e=>{e.preventDefault();el("loginError").textContent="";try{await authRequest("password",{email:el("email").value,password:el("password").value});await load()}catch(x){saveSession(null);el("loginError").textContent=x.message}});el("refresh").onclick=()=>load().catch(x=>alert(x.message));el("period").onchange=()=>load().catch(x=>alert(x.message));el("logout").onclick=()=>{saveSession(null);location.reload()};
 document.querySelectorAll("[data-action]").forEach(b=>b.onclick=async()=>{const action=b.dataset.action;if(action==="report"&&!confirm("Отправить отчёт на почту сейчас?"))return;if(!confirm("Запустить «"+b.firstChild.textContent.trim()+"»?"))return;b.disabled=true;const box=el("actionResult");box.classList.remove("hidden");box.textContent="Выполняется…";try{const r=await api("api/run",{method:"POST",body:JSON.stringify({action})});box.textContent=JSON.stringify(r,null,2);await load()}catch(x){box.textContent="Ошибка: "+x.message}finally{b.disabled=false}});if(state.session)load().catch(()=>saveSession(null));
+el("csvForm").addEventListener("submit",async e=>{e.preventDefault();const file=el("csvFile").files[0];if(!file)return;const button=el("csvButton"),box=el("csvResult"),form=new FormData();form.append("file",file);button.disabled=true;box.classList.remove("hidden");box.textContent="Загружаю и проверяю CSV…";try{box.textContent=JSON.stringify(await api("api/catalog-csv",{method:"POST",body:form}),null,2);await load()}catch(x){box.textContent="Ошибка: "+x.message}finally{button.disabled=false}});if(state.session)load().catch(()=>saveSession(null));
 </script></body></html>`;
 
 Deno.serve(async (req) => {
@@ -269,7 +349,7 @@ Deno.serve(async (req) => {
     });
   }
   if (url.pathname.endsWith("/api/dashboard")) {
-    if (!await authorized(req)) {
+    if (!await adminUser(req)) {
       return json({ ok: false, error: "Нет доступа администратора" }, 401);
     }
     const days = Math.min(
@@ -286,7 +366,7 @@ Deno.serve(async (req) => {
     }
   }
   if (url.pathname.endsWith("/api/run") && req.method === "POST") {
-    if (!await authorized(req)) {
+    if (!await adminUser(req)) {
       return json({ ok: false, error: "Нет доступа администратора" }, 401);
     }
     try {
@@ -297,6 +377,18 @@ Deno.serve(async (req) => {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
       }, 500);
+    }
+  }
+  if (url.pathname.endsWith("/api/catalog-csv") && req.method === "POST") {
+    const user = await adminUser(req);
+    if (!user) return json({ok:false,error:"Нет доступа администратора"},401);
+    try {
+      const form = await req.formData();
+      const file = form.get("file");
+      if (!(file instanceof File)) return json({ok:false,error:"CSV-файл не выбран"},400);
+      return json(await importTildaCsv(file,user.id));
+    } catch (error) {
+      return json({ok:false,error:error instanceof Error?error.message:String(error)},400);
     }
   }
   return new Response(HTML, {

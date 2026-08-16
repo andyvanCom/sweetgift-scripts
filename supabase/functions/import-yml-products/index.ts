@@ -18,6 +18,16 @@ function chunks<T>(items: T[], size: number): T[][] {
   return result;
 }
 
+async function selectAll(table: string, columns: string) {
+  const rows: CatalogRow[] = [];
+  for (let from = 0;; from += 1000) {
+    const { data, error } = await supabase.from(table).select(columns).range(from, from + 999);
+    if (error) throw error;
+    rows.push(...((data || []) as CatalogRow[]));
+    if ((data || []).length < 1000) return rows;
+  }
+}
+
 function arr<T>(value: T | T[] | undefined | null): T[] {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
@@ -124,6 +134,20 @@ function ingredientMatchesRule(
   }
 
   return normalized.includes(rule.keyword);
+}
+
+type CatalogRow = Record<string, unknown>;
+
+function catalogChanged(before: CatalogRow, after: CatalogRow) {
+  const fields = ["title", "url", "price", "old_price", "available"];
+  return fields.some((field) => String(before[field] ?? "") !== String(after[field] ?? ""));
+}
+
+function changeSample(rows: CatalogRow[], key: string) {
+  return rows.slice(0, 20).map((row) => ({
+    key: String(row[key] || ""),
+    title: String(row.title || row.option_value || row[key] || ""),
+  }));
 }
 
 serve(async () => {
@@ -327,6 +351,46 @@ serve(async () => {
     const variantRows = Array.from(variantRowsByKey.values());
     const allIngredientRows = Array.from(ingredientRowsByKey.values()).flat();
 
+    // Read the previous snapshot before writing so the job log contains a
+    // useful YML delta instead of comparing the source to its own upsert.
+    const [previousProducts, previousVariants] = await Promise.all([
+      selectAll("products_catalog", "product_key,title,url,price,old_price,available"),
+      selectAll("product_variants", "variant_key,title,url,price,old_price,available,option_name,option_value"),
+    ]);
+
+    const previousProductMap = new Map((previousProducts || []).map((row) => [String(row.product_key), row as CatalogRow]));
+    const previousVariantMap = new Map((previousVariants || []).map((row) => [String(row.variant_key), row as CatalogRow]));
+    const addedProducts = productRows.filter((row) => !previousProductMap.has(String(row.product_key)) || previousProductMap.get(String(row.product_key))?.available === false);
+    const changedProducts = productRows.filter((row) => {
+      const before = previousProductMap.get(String(row.product_key));
+      return before && before.available !== false && catalogChanged(before, row);
+    });
+    const removedProducts = (previousProducts || []).filter((row) => row.available !== false && !sourceProductKeys.has(String(row.product_key)));
+    const addedVariants = variantRows.filter((row) => !previousVariantMap.has(String(row.variant_key)) || previousVariantMap.get(String(row.variant_key))?.available === false);
+    const changedVariants = variantRows.filter((row) => {
+      const before = previousVariantMap.get(String(row.variant_key));
+      return before && before.available !== false && catalogChanged(before, row);
+    });
+    const removedVariants = (previousVariants || []).filter((row) => row.available !== false && !sourceVariantKeys.has(String(row.variant_key)));
+    const catalogChanges = {
+      products: {
+        added: addedProducts.length,
+        removed: removedProducts.length,
+        changed: changedProducts.length,
+        added_sample: changeSample(addedProducts, "product_key"),
+        removed_sample: changeSample(removedProducts, "product_key"),
+        changed_sample: changeSample(changedProducts, "product_key"),
+      },
+      variants: {
+        added: addedVariants.length,
+        removed: removedVariants.length,
+        changed: changedVariants.length,
+        added_sample: changeSample(addedVariants, "variant_key"),
+        removed_sample: changeSample(removedVariants, "variant_key"),
+        changed_sample: changeSample(changedVariants, "variant_key"),
+      },
+    };
+
     // The old implementation performed an upsert, delete and insert for every
     // product (more than 2,000 HTTP calls for the current catalog). Batched
     // writes keep the function well inside the Edge Function execution limit.
@@ -347,11 +411,7 @@ serve(async () => {
       if (variantUpsertError) throw variantUpsertError;
     }
 
-    const { data: existingVariants, error: existingVariantsError } = await supabase
-      .from("product_variants")
-      .select("variant_key,available");
-
-    if (existingVariantsError) throw existingVariantsError;
+    const existingVariants = await selectAll("product_variants", "variant_key,available");
 
     const missingVariantKeys = (existingVariants || [])
       .filter((row) => row.available !== false && !sourceVariantKeys.has(String(row.variant_key)))
@@ -384,11 +444,7 @@ serve(async () => {
       ingredientsInserted += batch.length;
     }
 
-    const { data: existingProducts, error: existingProductsError } = await supabase
-      .from("products_catalog")
-      .select("product_key,available");
-
-    if (existingProductsError) throw existingProductsError;
+    const existingProducts = await selectAll("products_catalog", "product_key,available");
 
     const missingKeys = (existingProducts || [])
       .filter((row) => row.available !== false && !sourceProductKeys.has(String(row.product_key)))
@@ -453,6 +509,7 @@ serve(async () => {
           product_seo_entities: productEntitiesData,
           product_new_year_entities: newYearEntitiesData,
           article_product_cache: articleProductCacheData,
+          catalog_changes: catalogChanges,
         },
       }).eq("id", jobLogId);
     }
@@ -467,6 +524,7 @@ serve(async () => {
       articleProductCache: articleProductCacheData,
       ingredientsInserted,
       deactivated,
+      catalogChanges,
       startedAt,
     }), {
       headers: { "content-type": "application/json" },
