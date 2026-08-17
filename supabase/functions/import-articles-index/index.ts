@@ -286,7 +286,10 @@ async function filterDailyItems(
   items: FeedItem[],
 ): Promise<FeedItem[]> {
   const articleKeys = items.map((item) => getArticleKey(item.url));
-  const existing = new Map<string, string | null>();
+  const existing = new Map<
+    string,
+    { feedLastmod: string | null; isActive: boolean }
+  >();
 
   // PostgREST encodes .in() values into the URL. Chunking avoids oversized
   // requests after a large Tilda article re-import.
@@ -294,13 +297,16 @@ async function filterDailyItems(
     const chunk = articleKeys.slice(i, i + 100);
     const { data, error } = await supabaseAdmin
       .from("articles_index")
-      .select("article_key, feed_lastmod")
+      .select("article_key, feed_lastmod, is_active")
       .in("article_key", chunk);
 
     if (error) throw error;
 
     for (const row of data || []) {
-      existing.set(row.article_key, row.feed_lastmod || null);
+      existing.set(row.article_key, {
+        feedLastmod: row.feed_lastmod || null,
+        isActive: row.is_active === true,
+      });
     }
   }
 
@@ -309,7 +315,14 @@ async function filterDailyItems(
 
     if (!existing.has(key)) return true;
 
-    return isRemoteNewer(item.lastmod, existing.get(key) || null);
+    const current = existing.get(key)!;
+
+    // A page present in the current Tilda feed is active even if an older
+    // incomplete import marked it inactive. Reindex it to restore both the
+    // active flag and article_product_filters.article_url bindings.
+    if (!current.isActive) return true;
+
+    return isRemoteNewer(item.lastmod, current.feedLastmod);
   });
 }
 
@@ -818,7 +831,10 @@ Deno.serve(async (req) => {
         }).eq("id", jobLogId);
       }
 
-      if (mode === "daily" && result.has_more && chainDepth < 9) {
+      // A repaired or republished Tilda feed can legitimately contain more
+      // than 1,000 articles that need reactivation. Continue in isolated
+      // Edge invocations instead of stopping after the former 10 batches.
+      if (mode === "daily" && result.has_more && chainDepth < 29) {
         const nextUrl = new URL(req.url);
         nextUrl.searchParams.set("mode", "daily");
         nextUrl.searchParams.set("limit", String(limit));

@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { SMTPClient } from "https://deno.land/x/denomailer/mod.ts";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -13,6 +13,68 @@ const SMTP_PASSWORD = Deno.env.get("SMTP_PASSWORD")!;
 const REPORT_TO_EMAIL = Deno.env.get("REPORT_TO_EMAIL")!;
 const REPORT_FROM_EMAIL =
   Deno.env.get("REPORT_FROM_EMAIL") || "SweetGift <no-reply@sweetgift.ru>";
+
+const SMTP_ATTEMPTS = 3;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function encodeBase64Utf8(text: string) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+
+  return btoa(binary).match(/.{1,76}/g)?.join("\r\n") || "";
+}
+
+async function sendReportEmail(subject: string, html: string) {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= SMTP_ATTEMPTS; attempt++) {
+    const client = new SMTPClient({
+      connection: {
+        hostname: SMTP_HOST,
+        port: SMTP_PORT,
+        tls: true,
+        auth: {
+          username: SMTP_USER,
+          password: SMTP_PASSWORD,
+        },
+      },
+    });
+
+    try {
+      await client.send({
+        from: REPORT_FROM_EMAIL,
+        to: REPORT_TO_EMAIL,
+        subject,
+        mimeContent: [{
+          mimeType: 'text/html; charset="utf-8"',
+          transferEncoding: "base64",
+          content: encodeBase64Utf8(html),
+        }],
+      });
+      await client.close();
+      return attempt;
+    } catch (error) {
+      lastError = error;
+      console.error(`SMTP attempt ${attempt}/${SMTP_ATTEMPTS} failed`, error);
+      try {
+        await client.close();
+      } catch {
+        // The connection may already be closed after a transport failure.
+      }
+
+      if (attempt < SMTP_ATTEMPTS) await sleep(attempt * 1500);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
 
 function escapeHtml(text: string) {
   return text
@@ -53,15 +115,29 @@ function extractLocs(xml: string): string[] {
 }
 
 async function countArticleFeedUrls(feedUrl: string): Promise<number> {
-  const rootXml = await fetchText(feedUrl);
-  const sitemapUrls = extractLocs(rootXml)
-    .filter((url) => url.includes("sitemap-feed-"));
+  const pendingSitemaps = [feedUrl];
+  const visitedSitemaps = new Set<string>();
   const articleUrls = new Set<string>();
 
-  for (const sitemapUrl of sitemapUrls) {
+  while (pendingSitemaps.length) {
+    const sitemapUrl = pendingSitemaps.shift()!;
+    if (visitedSitemaps.has(sitemapUrl)) continue;
+    visitedSitemaps.add(sitemapUrl);
+
+    if (visitedSitemaps.size > 200) {
+      throw new Error("Article sitemap nesting limit exceeded");
+    }
+
     const xml = await fetchText(sitemapUrl);
     for (const url of extractLocs(xml)) {
-      if (url.includes("sweetgift.ru/stati/")) articleUrls.add(url);
+      if (url.includes("sweetgift.ru/stati/")) {
+        articleUrls.add(url);
+      } else if (
+        url.includes("sweetgift.ru/sitemap-feed-") &&
+        !visitedSitemaps.has(url)
+      ) {
+        pendingSitemaps.push(url);
+      }
     }
   }
 
@@ -95,11 +171,47 @@ function formatJob(job: JobHealth): string {
   return `${state} ${job.job_name}: ${job.status}, ${finishedAt}, обработано ${job.processed_count}${error}`;
 }
 
+function catalogChangeLines(job: JobHealth | undefined): string[] {
+  const changes = job?.details?.catalog_changes as Record<string, Record<string, unknown>> | undefined;
+  const products = changes?.products || {};
+  const variants = changes?.variants || {};
+  const count = (section: Record<string, unknown>, key: string) => Number(section[key] || 0);
+  const samples = (section: Record<string, unknown>, key: string) =>
+    (Array.isArray(section[key]) ? section[key] as Array<Record<string, unknown>> : [])
+      .map((item) => String(item.title || item.key || ""))
+      .filter(Boolean)
+      .slice(0, 10);
+  if (!changes) return ["Данные сравнения пока отсутствуют — появятся после следующего импорта YML."];
+  const total = count(products, "added") + count(products, "removed") + count(products, "changed") +
+    count(variants, "added") + count(variants, "removed") + count(variants, "changed");
+  if (!total) return ["Без изменений ✅"];
+  const lines = [
+    `Товары: +${count(products, "added")} / −${count(products, "removed")} / изменено ${count(products, "changed")}`,
+    `Варианты: +${count(variants, "added")} / −${count(variants, "removed")} / изменено ${count(variants, "changed")}`,
+  ];
+  for (const [label, section, key] of [
+    ["Добавлены", products, "added_sample"],
+    ["Удалены", products, "removed_sample"],
+    ["Изменены", products, "changed_sample"],
+  ] as const) {
+    const values = samples(section, key);
+    if (values.length) lines.push(`${label}: ${values.join("; ")}`);
+  }
+  return lines;
+}
+
 Deno.serve(async (req) => {
   const runSecret = Deno.env.get("REPORT_RUN_SECRET");
   const requestSecret = req.headers.get("x-report-secret");
 
-  if (runSecret && requestSecret !== runSecret) {
+  if (!runSecret) {
+    return Response.json(
+      { ok: false, error: "REPORT_RUN_SECRET is not configured" },
+      { status: 503 },
+    );
+  }
+
+  if (requestSecret !== runSecret) {
     return Response.json(
       { ok: false, error: "Unauthorized" },
       { status: 401 },
@@ -110,6 +222,7 @@ Deno.serve(async (req) => {
   const startedAt = new Date().toISOString();
   const startedMs = Date.now();
   let jobLogId: number | string | null = null;
+  let stage = "initialize";
 
   try {
     const { data: jobLog } = await supabase
@@ -124,6 +237,7 @@ Deno.serve(async (req) => {
 
     jobLogId = jobLog?.id || null;
 
+    stage = "build-report";
     const { data, error } = await supabase.rpc("get_daily_report_text");
 
     if (error) throw new Error(error.message);
@@ -134,6 +248,7 @@ Deno.serve(async (req) => {
       "classify-articles",
       "refresh-article-product-cache",
     ];
+    stage = "read-pipeline-health";
     const { data: jobRows, error: jobsError } = await supabase
       .from("system_job_logs")
       .select(
@@ -171,6 +286,7 @@ Deno.serve(async (req) => {
       }
     );
 
+    stage = "read-feed-sources";
     const { data: feeds, error: feedsError } = await supabase
       .from("feed_sources")
       .select("name,url,last_run_at,last_status,last_error");
@@ -200,6 +316,7 @@ Deno.serve(async (req) => {
       ? [`Журнал pipeline: ${jobsError.message}`]
       : [];
 
+    stage = "compare-sources";
     if (productFeed?.url) {
       try {
         productSourceCount = await countProductFeedProducts(productFeed.url);
@@ -248,6 +365,9 @@ Deno.serve(async (req) => {
       "🔍 СВЕРКА С ИСТОЧНИКАМИ",
       `Товары: источник ${productSourceCount ?? "ошибка"}, база ${productsCount || 0} ${productsMatch ? "✅" : "❌"}`,
       `Статьи: источник ${articleSourceCount ?? "ошибка"}, база ${articlesCount || 0} ${articlesMatch ? "✅" : "❌"}`,
+      "",
+      "📦 ИЗМЕНЕНИЯ КАТАЛОГА YML",
+      ...catalogChangeLines(latestJobs.get("import-yml-products")),
     ];
 
     if (sourceErrors.length) {
@@ -281,26 +401,8 @@ Deno.serve(async (req) => {
       </div>
     `;
 
-    const client = new SMTPClient({
-      connection: {
-        hostname: SMTP_HOST,
-        port: SMTP_PORT,
-        tls: true,
-        auth: {
-          username: SMTP_USER,
-          password: SMTP_PASSWORD,
-        },
-      },
-    });
-
-    await client.send({
-      from: REPORT_FROM_EMAIL,
-      to: REPORT_TO_EMAIL,
-      subject,
-      html,
-    });
-
-    await client.close();
+    stage = "send-smtp";
+    const smtpAttempts = await sendReportEmail(subject, html);
 
     if (jobLogId) {
       await supabase.from("system_job_logs").update({
@@ -318,6 +420,7 @@ Deno.serve(async (req) => {
           articles_source_count: articleSourceCount,
           articles_db_count: articlesCount || 0,
           source_errors: sourceErrors,
+          smtp_attempts: smtpAttempts,
         },
       }).eq("id", jobLogId);
     }
@@ -329,7 +432,9 @@ Deno.serve(async (req) => {
       sent_to: REPORT_TO_EMAIL,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const rawMessage = e instanceof Error ? e.message : String(e);
+    const message = `[${stage}] ${rawMessage}`;
+    console.error("send-daily-report failed", { stage, error: rawMessage });
 
     if (jobLogId) {
       await supabase.from("system_job_logs").update({

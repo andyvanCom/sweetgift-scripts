@@ -21,6 +21,32 @@ type Entity = {
   reason: string;
 };
 
+const ARTICLE_PAGE_SIZE = 500;
+
+async function loadActiveArticles(
+  supabase: ReturnType<typeof createClient>,
+): Promise<Article[]> {
+  const articles: Article[] = [];
+
+  for (let from = 0;; from += ARTICLE_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("articles_index")
+      .select("article_key,title,description,url,is_active")
+      .eq("is_active", true)
+      .order("article_key", { ascending: true })
+      .range(from, from + ARTICLE_PAGE_SIZE - 1);
+
+    if (error) throw new Error(error.message);
+
+    const page = (data || []) as Article[];
+    articles.push(...page);
+
+    if (page.length < ARTICLE_PAGE_SIZE) break;
+  }
+
+  return articles;
+}
+
 function has(text: string, patterns: string[]) {
   return patterns.some((p) => text.includes(p));
 }
@@ -214,14 +240,9 @@ Deno.serve(async (req) => {
 
     jobLogId = jobLog?.id || null;
 
-    const { data: articles, error } = await supabase
-      .from("articles_index")
-      .select("article_key,title,description,url,is_active")
-      .eq("is_active", true);
-
-    if (error) throw new Error(error.message);
-
-    const allArticles = (articles || []) as Article[];
+    // PostgREST returns at most 1000 rows by default. Load all active articles
+    // explicitly so new articles beyond that boundary are also classified.
+    const allArticles = await loadActiveArticles(supabase);
 
     const { error: deleteError } = await supabase
       .from("article_seo_entities")
