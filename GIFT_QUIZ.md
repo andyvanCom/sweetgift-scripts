@@ -35,6 +35,8 @@ later answer narrows or reranks the already visible products; recipient and
 budget are not required before the first results are shown.
 The current count is repeated above the questions. During a subsequent RPC the
 previous count and cards remain visible instead of disappearing behind a loader.
+An animated hourglass and indeterminate progress bar make the active refresh
+state visible without claiming an inaccurate percentage.
 
 The `ingredients` answer is a multi-select of normalized
 `product_ingredients.tag` values. It uses strict AND semantics: every selected

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.22",
+  "version": "1.0.23",
   "modules": [
     {
       "name": "core",
@@ -122,7 +122,7 @@
       "name": "gift-quiz",
       "enabled": true,
       "src": "sweetgift-gift-quiz.js",
-      "version": "10",
+      "version": "11",
       "pages": ["all"]
     }
   ]
