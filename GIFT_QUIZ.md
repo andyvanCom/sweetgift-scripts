@@ -19,19 +19,25 @@ answer relevance first, then the combined score. The score is composed of up to
 10, weekly trend 5). Recommendation reasons are emitted only by rules that
 actually matched.
 
-The quiz also supports the two catalog formats already used by the composition
-selectors:
+The first question splits the quiz into three product paths:
 
-- `basket`: a basket is visually larger and offers more catalog variants;
-- `box`: a box or wooden crate is compact and easier to transport;
-- `any`: no format restriction.
+- `basket`: recipient, budget, style, ingredients, timing and dietary limits;
+- `box`: the same composition flow, limited to existing gift-box categories;
+- `strawberry`: box or bouquet, live flowers, recipient/child, budget and
+  timing. Child results strictly exclude products with alcohol.
+
+The first choice uses three visual cards with real catalog photography. Changing
+this answer clears downstream answers so values from one path cannot leak into
+another.
 
 The `ingredients` answer is a multi-select of normalized
 `product_ingredients.tag` values. It uses strict AND semantics: every selected
 tag must exist on a returned product. Selecting `none` disables the composition
 filter. Basket and box detection follows the same category/title rules as
 `get_gift_selector_catalog_for(text)`, so the dedicated composition pages and
-the unified quiz do not maintain separate product lists.
+the unified quiz do not maintain separate product lists. Strawberry products
+are selected from the existing chocolate-strawberry, strawberry-bouquet,
+strawberry-and-flowers and chocolate-fruit categories.
 
 The production catalog audit on 2026-08-14 found 784 available priced products:
 185 below 5,000 ₽; 69 from 5,000–6,999 ₽; 167 from 7,000–9,999 ₽; 186 from

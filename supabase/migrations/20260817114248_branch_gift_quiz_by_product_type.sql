@@ -1,0 +1,179 @@
+-- Split the gift quiz into basket/box and chocolate-strawberry paths.
+-- The predicates reuse the existing catalog categories and normalized tags.
+CREATE OR REPLACE FUNCTION public.get_gift_quiz_recommendations(p_answers jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 6)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+with input as (
+ select coalesce(p_answers->>'recipient','') recipient,coalesce(p_answers->>'budget','any') budget,
+ coalesce(p_answers->>'style','best') style,coalesce(p_answers->>'timing','unknown') timing,
+ coalesce(nullif(p_answers->>'gift_type',''),nullif(p_answers->>'format',''),'any') gift_type,
+ coalesce(p_answers->>'strawberry_format','any') strawberry_format,
+ coalesce(p_answers->>'flowers','any') flowers,
+ case when jsonb_typeof(p_answers->'ingredients')='array' then p_answers->'ingredients'
+   else '[]'::jsonb end ingredients,
+ coalesce(p_answers->>'pork','none') pork,
+ case when jsonb_typeof(p_answers->'diet')='array' then p_answers->'diet'
+   when p_answers ? 'diet' then jsonb_build_array(p_answers->>'diet')
+   when p_answers ? 'pork' then jsonb_build_array(p_answers->>'pork')
+   else '["none"]'::jsonb end diet,
+ greatest(1,least(coalesce(p_limit,6),12)) lim
+),catalog as (
+ select p.product_key,p.title,p.url,p.image,p.price,p.category_slug,
+ lower(string_agg(distinct concat_ws(' ',pi.ingredient_raw,pi.ingredient_normalized), ' ')) ingredient_text,
+ coalesce(array_agg(distinct lower(pi.tag)) filter(where pi.tag is not null),'{}'::text[]) tags,
+ coalesce(array_agg(distinct lower(se.entity_value)) filter(where se.entity_value is not null),'{}'::text[]) entities,
+ coalesce(s.views,0) views,coalesce(s.add_to_cart,0) carts,coalesce(s.trend_score,0) trend
+ from public.products_catalog p left join public.product_ingredients pi on pi.product_key=p.product_key
+ left join public.product_seo_entities se on se.product_key=p.product_key left join public.products_stats s on s.product_key=p.product_key
+ where p.available=true and p.price>0
+ group by p.product_key,p.title,p.url,p.image,p.price,p.category_slug,s.views,s.add_to_cart,s.trend_score
+),orders as (select product_key,sum(coalesce(quantity,1)) orders from public.product_orders where product_key is not null group by product_key),
+features as (
+ select c.*,i.*,coalesce(o.orders,0) orders,
+ case i.budget when 'under_5000' then c.price<5000 when '5000_7000' then c.price between 5000 and 6999
+ when '7000_10000' then c.price between 7000 and 9999 when '10000_15000' then c.price between 10000 and 14999 when 'over_15000' then c.price>=15000 else true end budget_ok,
+ case i.style when 'sweet' then c.tags&&array['strawberry','chocolate','candies','raspberry'] or c.entities&&array['сладкий','клубника в шоколаде']
+ when 'fruit' then c.tags&&array['strawberry','raspberry','pineapple','grapes','apples','mandarins','bananas','kiwi','pitahaya','papaya','blackberry','nectarines'] or c.entities&&array['фруктовая корзина']
+ when 'gourmet' then c.tags&&array['cheese','meat','sausage','ikra','crab'] or c.entities&&array['гастрономический','сырный','мясной']
+ when 'tea' then c.tags&&array['tea','coffee','honey','орехи','chocolate','candies'] when 'hearty' then c.tags&&array['meat','sausage','cheese','ikra','crab']
+ when 'premium' then c.entities&&array['премиум','vip'] or c.price>=15000 else true end style_ok,
+ case i.recipient when 'manager' then c.entities&&array['руководитель'] when 'colleague' then c.entities&&array['коллега']
+ when 'woman' then c.entities&&array['девушка','жена','мама','бабушка'] else false end recipient_match,
+ (coalesce(c.category_slug,'') in ('fruktovye-korziny','klubnika-v-shokolade','bukety-iz-klubniki','frukty-v-shokolade','korziny-s-fruktami-i-shampanskim','bukety_iz_klubniki_i_tsvetov','stakanchiki_s_klubnikoy') or lower(coalesce(c.title,'')) ~ '(^|[^0-9])1 день'
+ or c.product_key like '/fruktovye-korziny/%' or c.product_key like '/klubnika-v-shokolade/%' or c.product_key like '/bukety-iz-klubniki/%'
+ or c.entities&&array['клубника в шоколаде','букет из клубники','фруктовая корзина']) perishable,
+ (coalesce(c.ingredient_text,'') ~ '(свинин|кабан|бекон|ветчин|прошут|хамон|карбонад|корейк|грудинк|шпик|панчет|чориз|jamon|prosciutto|bacon|pork|chorizo)'
+ or (coalesce(c.ingredient_text,'') ~ '(колбас|салями|salami)' and coalesce(c.ingredient_text,'') !~ '(олени|медвед|лос|косул|индей|куриц|говя|утк|гус|баран|ягнен|конин)')) pork_risk,
+ (c.tags&&array['meat','sausage','ikra','crab'] or
+   lower(concat_ws(' ',c.title,c.ingredient_text)) ~ '(мяс|свинин|говя|телят|баран|ягнен|олени|медвед|лос|косул|индей|куриц|утк|гус|конин|колбас|салями|бекон|ветчин|прошут|хамон|карбонад|корейк|грудинк|шпик|панчет|чориз|рыб|лосос|с[её]мг|форел|икр|краб|кревет|тунец|анчоус|паштет)') vegetarian_risk,
+ (c.tags&&array['chocolate','candies','honey','cookies'] or
+   lower(concat_ws(' ',c.title,c.ingredient_text)) ~ '(шоколад|конфет|сладост|сахар|м[её]д|печень|зефир|мармелад|варень|джем|карамел|пирож|трюфел)') sweet_risk,
+ (c.tags&&array['cheese'] or
+   lower(concat_ws(' ',c.title,c.ingredient_text)) ~ '(молок|сливк|сыр|сливочн[^ ]* масл|йогурт|творог|сметан|кефир|лактоз|пармезан|бри([^а-я]|$)|камамбер|моцарел)') dairy_risk,
+ lower(concat_ws(' ',c.title,c.ingredient_text)) ~ '(алкогол|вино|шампан|просекко|коньяк|бренди|виски|ром([^а-я]|$)|водк|лик[её]р|пиво|сидр|джин([^а-я]|$)|текил)' alcohol_risk
+ from catalog c cross join input i left join orders o on o.product_key=c.product_key
+),eligible as (
+ select *,(10+case when recipient_match then 10 else 0 end+case when style='best' then 0 when style_ok then 20 else 0 end+
+ case when gift_type in ('basket','box','strawberry') then 10 else 0 end+
+ case when gift_type='strawberry' and strawberry_format in ('box','bouquet') then 5 else 0 end+
+ case when gift_type='strawberry' and flowers in ('with_flowers','without_flowers') then 5 else 0 end+
+ case when jsonb_array_length(ingredients)>0 and not(ingredients ? 'none') then least(20,jsonb_array_length(ingredients)*5) else 0 end+
+ case when timing in ('now','today') and perishable then 10 when timing in ('tomorrow','longer') and not perishable then 10 when timing='unknown' then 5 else 0 end) relevance,
+ ln(1+orders)*20 order_signal,ln(1+carts)*15 cart_signal,ln(1+views)*10 view_signal,ln(1+trend)*5 trend_signal
+ from features where budget_ok
+ and (
+   gift_type='any'
+   or (gift_type='basket' and (
+     (lower(coalesce(title,'')) like '%корзин%' or lower(coalesce(product_key,'')) like '%korzin%')
+     and lower(coalesce(category_slug,'')) not in (
+       'klubnika-v-shokolade','bukety-iz-klubniki',
+       'bukety_iz_klubniki_i_tsvetov','frukty-v-shokolade','stakanchiki_s_klubnikoy'
+     )
+   ))
+   or (gift_type='box' and (
+     lower(coalesce(category_slug,'')) in ('novogodnie-nabory','ng-gift-box','gift-nabor','box-s-lomom')
+     or lower(coalesce(category_slug,'')) like '%nabor%'
+     or lower(coalesce(category_slug,'')) like '%gift-box%'
+     or lower(coalesce(category_slug,'')) like 'box-%'
+   ))
+   or (gift_type='strawberry' and lower(coalesce(category_slug,'')) in (
+     'klubnika-v-shokolade','bukety-iz-klubniki',
+     'bukety_iz_klubniki_i_tsvetov','frukty-v-shokolade','stakanchiki_s_klubnikoy'
+   ))
+ )
+ and (
+   gift_type<>'strawberry'
+   or strawberry_format='any'
+   or (strawberry_format='bouquet' and (
+     lower(coalesce(category_slug,'')) in ('bukety-iz-klubniki','bukety_iz_klubniki_i_tsvetov')
+     or lower(coalesce(title,'')) like '%букет%'
+   ))
+   or (strawberry_format='box' and (
+     lower(coalesce(category_slug,'')) in ('klubnika-v-shokolade','frukty-v-shokolade','stakanchiki_s_klubnikoy')
+     and lower(coalesce(title,'')) not like '%букет%'
+   ))
+ )
+ and (
+   gift_type<>'strawberry'
+   or strawberry_format='box'
+   or flowers='any'
+   or (flowers='with_flowers' and (
+     lower(coalesce(category_slug,''))='bukety_iz_klubniki_i_tsvetov'
+     or lower(coalesce(title,'')) ~ '(цвет|пион|роз[аы]|эустом|гортенз)'
+   ))
+   or (flowers='without_flowers' and not (
+     lower(coalesce(category_slug,''))='bukety_iz_klubniki_i_tsvetov'
+     or lower(coalesce(title,'')) ~ '(цвет|пион|роз[аы]|эустом|гортенз)'
+   ))
+ )
+ and (
+   gift_type='strawberry'
+   or jsonb_array_length(ingredients)=0
+   or ingredients ? 'none'
+   or not exists (
+     select 1
+     from jsonb_array_elements_text(ingredients) selected(tag)
+     where not (lower(selected.tag)=any(tags))
+   )
+ )
+ and not(timing in ('tomorrow','longer') and perishable) and not(diet ? 'no_pork' and pork_risk)
+ and not(diet ? 'vegetarian' and vegetarian_risk)
+ and not(diet ? 'no_sweet' and sweet_risk)
+ and not(diet ? 'no_dairy' and dairy_risk)
+ and not(recipient='child' and alcohol_risk)
+),scored as (select *,relevance+least(order_signal,20)+least(cart_signal,15)+least(view_signal,10)+least(trend_signal,5) score from eligible),
+ranked as (select *,row_number() over(order by relevance desc,score desc,orders desc,carts desc,views desc,price) rn from scored),
+ordered as (
+ select *,row_number() over(order by
+   case when budget='any' and recipient='colleague' and style='best' then
+     case when rn<=3 then 0
+       when product_key=any(array[
+         '/podarochnye-korziny-s-produktami/tproduct/881111337422-podarochnaya-korzina-russkii-banket',
+         '/premium-korziny/tproduct/763890584232-podarochnaya-korzina-vershina-vkusa',
+         '/podarochnye-korziny-s-produktami/tproduct/847585715982-podarochnaya-korzina-s-ikroi-i-fruktami'
+       ]::text[]) then 1 else 2 end
+   else 0 end,
+   case when budget='any' and recipient='colleague' and style='best' and rn>3
+     and product_key=any(array[
+       '/podarochnye-korziny-s-produktami/tproduct/881111337422-podarochnaya-korzina-russkii-banket',
+       '/premium-korziny/tproduct/763890584232-podarochnaya-korzina-vershina-vkusa',
+       '/podarochnye-korziny-s-produktami/tproduct/847585715982-podarochnaya-korzina-s-ikroi-i-fruktami'
+     ]::text[])
+     then array_position(array[
+       '/podarochnye-korziny-s-produktami/tproduct/881111337422-podarochnaya-korzina-russkii-banket',
+       '/premium-korziny/tproduct/763890584232-podarochnaya-korzina-vershina-vkusa',
+       '/podarochnye-korziny-s-produktami/tproduct/847585715982-podarochnaya-korzina-s-ikroi-i-fruktami'
+     ]::text[],product_key) else rn end,
+   rn) display_rn
+ from ranked
+),
+result as (
+ select jsonb_build_object('product_key',product_key,'title',title,'url',url,'image',image,'price',price,'score',round(score::numeric,2),
+ 'match_percent',least(99,greatest(1,round(score))),'reasons',to_jsonb(array_remove(array[
+ case when budget_ok then 'Соответствует бюджету' end,case when style_ok and style<>'best' then 'Подходит выбранному типу подарка' end,
+ case when recipient_match then 'Подходит выбранному получателю' end,
+ case when gift_type='basket' then 'Подарочная корзина' when gift_type='box' then 'Подарочный бокс или набор' when gift_type='strawberry' then 'Клубника или фрукты в шоколаде' end,
+ case when gift_type='strawberry' and strawberry_format='bouquet' then 'В виде букета' when gift_type='strawberry' and strawberry_format='box' then 'В коробочке' end,
+ case when gift_type='strawberry' and flowers='with_flowers' then 'С живыми цветами' when gift_type='strawberry' and flowers='without_flowers' then 'Без живых цветов' end,
+ case when gift_type<>'strawberry' and jsonb_array_length(ingredients)>0 and not(ingredients ? 'none') then 'Содержит все выбранные ингредиенты' end,
+ case when recipient='child' then 'Без алкоголя' end,
+ case when diet ? 'no_pork' then 'Без свинины' end,
+ case when diet ? 'vegetarian' then 'Без мяса и рыбы' end,
+ case when diet ? 'no_sweet' then 'Без сладкого' end,
+ case when diet ? 'no_dairy' then 'Без молочных продуктов' end,
+ case when orders>0 then 'Часто покупают' end,case when carts>0 then 'Часто добавляют в корзину' end,
+ case when trend>0 then 'Популярен за последнюю неделю' end,
+ case when timing in ('now','today') and perishable then 'Подходит для вручения день в день' end,
+ case when timing in ('tomorrow','longer') and not perishable then 'Подходит для более длительного хранения' end],null))) item,display_rn rn from ordered
+)
+select jsonb_build_object('total',(select count(*) from scored),'relaxed',false,
+'products',coalesce((select jsonb_agg(item order by rn) from result where rn<=(select lim from input)),'[]'::jsonb)) $function$;
+
+revoke execute on function public.get_gift_quiz_recommendations(jsonb,integer) from public, authenticated;
+grant execute on function public.get_gift_quiz_recommendations(jsonb,integer) to anon;
+
+comment on function public.get_gift_quiz_recommendations(jsonb,integer) is
+  'Branches recommendations into baskets, boxes and chocolate-strawberry gifts; applies path-specific format, flowers, composition, timing and child-safety filters.';
