@@ -30,6 +30,10 @@ The first choice uses three visual cards with real catalog photography. Changing
 this answer clears downstream answers so values from one path cannot leak into
 another.
 
+Recommendations start immediately after the first product-path answer. Every
+later answer narrows or reranks the already visible products; recipient and
+budget are not required before the first results are shown.
+
 The `ingredients` answer is a multi-select of normalized
 `product_ingredients.tag` values. It uses strict AND semantics: every selected
 tag must exist on a returned product. Selecting `none` disables the composition
@@ -51,7 +55,7 @@ complete normalized coverage in the current catalog, so presenting them as hard
 filters would be misleading. Perishability is used only as a cautious ranking
 signal and never as an exclusion.
 
-Quiz state is stored in `sessionStorage`. Query parameters are not used, avoiding
-indexable duplicate URLs. Funnel events are appended to `gift_quiz_events` only
+Quiz state is stored in `sessionStorage` and mirrored to query parameters so a
+selection can be shared. Funnel events are appended to `gift_quiz_events` only
 through `track_gift_quiz_event`; the table itself is unavailable to frontend
 roles.
