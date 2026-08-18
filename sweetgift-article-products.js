@@ -16,7 +16,7 @@ Legacy articles fall back to the last /stati/ URL segment.
   var STYLE_ID = 'sg-article-products-css';
   // Version the key so a previously cached empty response cannot hide a
   // newly configured or freshly rebuilt product selection.
-  var CACHE_PREFIX = 'sg_article_products_v2_';
+  var CACHE_PREFIX = 'sg_article_products_v3_';
   var CACHE_TTL = 15 * 60 * 1000;
   var RETRY_DELAYS = [0, 750, 2000];
   var REQUEST_TIMEOUT = 6000;
