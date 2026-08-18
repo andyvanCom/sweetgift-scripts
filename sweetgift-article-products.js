@@ -14,7 +14,9 @@ Legacy articles fall back to the last /stati/ URL segment.
   var MODULE_NAME = 'Article Products';
   var ROOT_ATTR = 'data-sg-article-products';
   var STYLE_ID = 'sg-article-products-css';
-  var CACHE_PREFIX = 'sg_article_products_';
+  // Version the key so a previously cached empty response cannot hide a
+  // newly configured or freshly rebuilt product selection.
+  var CACHE_PREFIX = 'sg_article_products_v2_';
   var CACHE_TTL = 15 * 60 * 1000;
   var RETRY_DELAYS = [0, 750, 2000];
   var REQUEST_TIMEOUT = 6000;
@@ -90,8 +92,15 @@ Legacy articles fall back to the last /stati/ URL segment.
     try {
       var cached = JSON.parse(window.sessionStorage.getItem(CACHE_PREFIX + alias) || 'null');
 
-      if (cached && cached.savedAt && Date.now() - cached.savedAt < CACHE_TTL) {
-        return cached.data || null;
+      if (
+        cached &&
+        cached.savedAt &&
+        Date.now() - cached.savedAt < CACHE_TTL &&
+        cached.data &&
+        Array.isArray(cached.data.products) &&
+        cached.data.products.length
+      ) {
+        return cached.data;
       }
     } catch (error) {
       debug('Cache read skipped', error);
@@ -101,6 +110,8 @@ Legacy articles fall back to the last /stati/ URL segment.
   }
 
   function writeCache(alias, data) {
+    if (!data || !Array.isArray(data.products) || !data.products.length) return;
+
     try {
       window.sessionStorage.setItem(CACHE_PREFIX + alias, JSON.stringify({
         savedAt: Date.now(),
