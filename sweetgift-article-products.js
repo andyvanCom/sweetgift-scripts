@@ -17,7 +17,7 @@ Legacy articles fall back to the last /stati/ URL segment.
   var STYLE_ID = 'sg-article-products-css';
   // Version the key so a previously cached empty response cannot hide a
   // newly configured or freshly rebuilt product selection.
-  var CACHE_PREFIX = 'sg_article_products_v6_';
+  var CACHE_PREFIX = 'sg_article_products_v7_';
   var CACHE_TTL = 15 * 60 * 1000;
   var HEDGE_DELAY = 800;
   // Tilda can keep the main thread busy for well over six seconds while the
@@ -25,6 +25,7 @@ Legacy articles fall back to the last /stati/ URL segment.
   // and discards a successful response. Allow the response callback to run.
   var REQUEST_TIMEOUT = 30000;
   var pendingRequests = new Map();
+  var requestQueue = Promise.resolve();
   var observer = null;
 
   function debug() {
@@ -374,11 +375,20 @@ Legacy articles fall back to the last /stati/ URL segment.
 
     if (pendingRequests.has(alias)) return pendingRequests.get(alias);
 
-    // Load independent article sections concurrently. Serializing them makes
-    // a lower section block the selection currently visible to the reader.
-    var request = requestAliasWithFallback(alias).then(function (data) {
+    // Cloudflare occasionally leaves one of two simultaneous HTTP/2 response
+    // streams open. The compact Edge endpoint is fast, so serialize the two
+    // article sections and avoid competing streams altogether.
+    var request = requestQueue.catch(function () {
+      return null;
+    }).then(function () {
+      return requestAliasWithFallback(alias);
+    }).then(function (data) {
       if (data) writeCache(alias, data);
       return data;
+    });
+
+    requestQueue = request.catch(function () {
+      return null;
     });
 
     pendingRequests.set(alias, request);
