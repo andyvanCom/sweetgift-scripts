@@ -291,6 +291,7 @@ SweetGift.ru | Core
     fetch(url, {
       method: 'POST',
       headers: {
+        'Accept': 'application/json',
         'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
       },
       body: body.toString()
