@@ -18,8 +18,11 @@ Legacy articles fall back to the last /stati/ URL segment.
   // newly configured or freshly rebuilt product selection.
   var CACHE_PREFIX = 'sg_article_products_v4_';
   var CACHE_TTL = 15 * 60 * 1000;
-  var RETRY_DELAYS = [0, 750, 2000];
-  var REQUEST_TIMEOUT = 6000;
+  var RETRY_DELAYS = [0, 1000];
+  // Tilda can keep the main thread busy for well over six seconds while the
+  // RPC has already returned 200. A short timer then wins the callback race
+  // and discards a successful response. Allow the response callback to run.
+  var REQUEST_TIMEOUT = 30000;
   var pendingRequests = new Map();
   var requestQueue = Promise.resolve();
   var observer = null;
