@@ -1,13 +1,21 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RUN_SECRET = Deno.env.get("REPORT_RUN_SECRET") || "";
 const PUBLISHABLE_KEY = "sb_publishable_JrPJQVLLpcDxjte5OSCnvg_ocvpBqqT";
+const SMTP_HOST = Deno.env.get("SMTP_HOST") || "smtp.yandex.ru";
+const SMTP_PORT = Number(Deno.env.get("SMTP_PORT") || "465");
+const SMTP_USER = Deno.env.get("SMTP_USER")!;
+const SMTP_PASSWORD = Deno.env.get("SMTP_PASSWORD")!;
+const LOGIN_FROM_EMAIL = Deno.env.get("REPORT_FROM_EMAIL") ||
+  "SweetGift <no-reply@sweetgift.ru>";
 const ADMIN_URL =
   "https://rvgvbxipccbkytmhltmi.functions.supabase.co/admin-dashboard";
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+const loginCodeRequests = new Map<string, number>();
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -28,6 +36,81 @@ async function adminUser(req: Request) {
 
   const { data, error } = await supabase.auth.getUser(token);
   return !error && data.user?.app_metadata?.role === "admin" ? data.user : null;
+}
+
+function encodeBase64Utf8(text: string) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary).match(/.{1,76}/g)?.join("\r\n") || "";
+}
+
+async function sendLoginCode(email: string, code: string) {
+  const client = new SMTPClient({
+    connection: {
+      hostname: SMTP_HOST,
+      port: SMTP_PORT,
+      tls: true,
+      auth: { username: SMTP_USER, password: SMTP_PASSWORD },
+    },
+  });
+  try {
+    await client.send({
+      from: LOGIN_FROM_EMAIL,
+      to: email,
+      subject: "Код входа в SweetGift Admin",
+      mimeContent: [{
+        mimeType: 'text/html; charset="utf-8"',
+        transferEncoding: "base64",
+        content: encodeBase64Utf8(
+          `<div style="font:16px/1.5 Arial,sans-serif;color:#261d1f;max-width:560px;margin:auto;padding:28px"><h2>Вход в SweetGift Admin</h2><p>Ваш одноразовый код:</p><p style="font-size:32px;font-weight:700;letter-spacing:6px;color:#a9284d">${code}</p><p>Введите код на странице администратора. Никому его не сообщайте.</p><p style="color:#786b6e;font-size:13px">Если вы не запрашивали вход, просто проигнорируйте письмо.</p></div>`,
+        ),
+      }],
+    });
+  } finally {
+    try {
+      await client.close();
+    } catch {
+      // The transport can already be closed after an SMTP failure.
+    }
+  }
+}
+
+async function requestLoginCode(email: string, ip: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) throw new Error("Введите email администратора");
+  const rateKey = `${ip}:${normalizedEmail}`;
+  const lastRequest = loginCodeRequests.get(rateKey) || 0;
+  if (Date.now() - lastRequest < 60000) {
+    throw new Error("Новый код можно запросить через минуту");
+  }
+
+  const { data: users, error: usersError } = await supabase.auth.admin.listUsers({
+    page: 1,
+    perPage: 1000,
+  });
+  if (usersError) throw usersError;
+  const admin = users.users.find((user) =>
+    user.email?.toLowerCase() === normalizedEmail &&
+    user.app_metadata?.role === "admin"
+  );
+  if (!admin) return;
+
+  const { data, error } = await supabase.auth.admin.generateLink({
+    type: "magiclink",
+    email: normalizedEmail,
+  });
+  if (error) throw error;
+  const properties = (data.properties || {}) as unknown as Record<
+    string,
+    unknown
+  >;
+  const code = String(properties.email_otp || properties.emailOtp || "").trim();
+  if (!code) throw new Error("Supabase не сформировал одноразовый код");
+  await sendLoginCode(normalizedEmail, code);
+  loginCodeRequests.set(rateKey, Date.now());
 }
 
 function num(value: unknown) {
@@ -314,7 +397,7 @@ const HTML = `<!doctype html><html lang="ru"><head>
 <style>
 :root{--ink:#261d1f;--muted:#786b6e;--line:#eadfdd;--red:#a9284d;--red2:#d85c7b;--ok:#24835d;--bad:#c04444;--shadow:0 14px 40px #43202914}*{box-sizing:border-box}body{margin:0;min-height:100vh;background:linear-gradient(145deg,#fff8f3,#f5eff1 55%,#f7eee9);color:var(--ink);font:15px/1.45 Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,select{font:inherit}.wrap{max-width:1240px;margin:auto;padding:28px 20px 60px}.top,.brand,.toolbar{display:flex;align-items:center}.top{justify-content:space-between;gap:16px;margin-bottom:22px}.brand{gap:12px}.logo{width:44px;height:44px;border-radius:15px;display:grid;place-items:center;color:#fff;font-size:21px;font-weight:800;background:linear-gradient(135deg,var(--red),var(--red2));box-shadow:var(--shadow)}h1,h2{margin:0}h1{font-size:25px}.sub{color:var(--muted);font-size:13px}.card,.login{background:#fffffff0;border:1px solid var(--line);border-radius:19px;box-shadow:var(--shadow)}.login{max-width:440px;margin:12vh auto;padding:30px}.field,.toolbar{gap:9px}.field{display:flex;margin-top:18px}.field input{min-width:0;flex:1;border:1px solid var(--line);border-radius:12px;padding:12px}.btn{border:0;border-radius:12px;padding:11px 14px;background:var(--red);color:white;font-weight:650;cursor:pointer}.btn:disabled{opacity:.55;cursor:wait}.btn.alt{background:#f1e7e6;color:var(--ink)}.btn.warn{background:#852e43}.toolbar{flex-wrap:wrap}.toolbar select{border:1px solid var(--line);border-radius:12px;background:white;padding:10px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.metric,.card{padding:18px}.metric b{display:block;font-size:27px;margin-top:4px}.section{margin-top:18px}.section h2{font-size:18px;margin-bottom:11px}.actions{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.action{text-align:left}.action small{display:block;font-weight:400;opacity:.82;margin-top:3px}.upload{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.upload input{flex:1;min-width:240px;border:1px dashed var(--line);border-radius:12px;padding:10px;background:white}.cols{display:grid;grid-template-columns:1.2fr .8fr;gap:15px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px 7px;border-bottom:1px solid var(--line);font-size:13px}th{color:var(--muted)}.status{display:inline-flex;align-items:center;gap:6px}.dot{width:8px;height:8px;border-radius:50%;background:var(--bad)}.success .dot{background:var(--ok)}.barrow{display:grid;grid-template-columns:minmax(95px,1fr) 2fr 42px;gap:9px;align-items:center;margin:9px 0}.barname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar{height:9px;background:#f1e7e6;border-radius:10px;overflow:hidden}.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--red),var(--red2))}.report,.result{white-space:pre-wrap;overflow:auto;border-radius:14px;padding:15px;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}.report{max-height:410px;background:#2c2426;color:#fff8f5}.result{margin-top:11px;max-height:210px;background:#f7efed}.error{color:var(--bad);margin-top:12px}.hidden{display:none!important}@media(max-width:880px){.grid{grid-template-columns:repeat(2,1fr)}.cols{grid-template-columns:1fr}.actions{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.wrap{padding:16px 11px 40px}.top{align-items:flex-start;flex-direction:column}.actions{grid-template-columns:1fr}.field{flex-direction:column}.metric b{font-size:22px}}
 </style></head><body>
-<div id="login" class="login"><div class="brand"><div class="logo">S</div><div><h2>SweetGift Admin</h2><div class="sub">Аналитика и управление обработкой</div></div></div><p>Войдите под учётной записью администратора.</p><form id="loginForm"><div class="field"><input id="email" type="email" autocomplete="username" placeholder="Email" required></div><div class="field"><input id="password" type="password" autocomplete="current-password" placeholder="Пароль" required><button class="btn">Войти</button></div></form><div id="loginError" class="error"></div></div>
+<div id="login" class="login"><div class="brand"><div class="logo">S</div><div><h2>SweetGift Admin</h2><div class="sub">Аналитика и управление обработкой</div></div></div><p>Введите email администратора и нажмите «Отправить код». Одноразовый код придёт на почту — введите его ниже для входа.</p><form id="emailForm"><div class="field"><input id="email" type="email" autocomplete="email" placeholder="Email администратора" required><button id="sendCode" class="btn">Отправить код</button></div></form><form id="codeForm" class="hidden"><div class="field"><input id="otpCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" pattern="[0-9]{6,8}" placeholder="Одноразовый код" required><button id="verifyCode" class="btn">Войти</button></div><button id="changeEmail" type="button" class="btn alt" style="width:100%;margin-top:10px">Изменить email</button></form><div id="loginError" class="error"></div></div>
 <main id="app" class="wrap hidden"><header class="top"><div class="brand"><div class="logo">S</div><div><h1>SweetGift</h1><div class="sub">Заказы и ночная обработка</div></div></div><div class="toolbar"><select id="period"><option value="7">7 дней</option><option value="30" selected>30 дней</option><option value="90">90 дней</option></select><button id="refresh" class="btn alt">Обновить</button><button id="logout" class="btn alt">Выйти</button></div></header>
 <section id="metrics" class="grid"></section>
 <section class="section"><h2>Управление pipeline</h2><div class="card"><div class="actions"><button class="btn action" data-action="products">Импорт товаров<small>YML, сущности и подборки</small></button><button class="btn action" data-action="articles">Импорт статей<small>Sitemap и индекс</small></button><button class="btn action" data-action="classify">Классификация<small>Темы и сущности</small></button><button class="btn action" data-action="articleProducts">Пересчитать подборки<small>Запустить в фоне без таймаута</small></button><button class="btn warn action" data-action="report">Отправить отчёт<small>Письмо прямо сейчас</small></button></div><div id="actionResult" class="result hidden"></div></div></section>
@@ -325,15 +408,21 @@ const HTML = `<!doctype html><html lang="ru"><head>
 </main><script>
 const AUTH_URL="${SUPABASE_URL}/auth/v1",AUTH_KEY="${PUBLISHABLE_KEY}",ADMIN_URL="${ADMIN_URL}",state={session:JSON.parse(localStorage.getItem("sg_admin_session")||"null")},el=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])),money=v=>new Intl.NumberFormat("ru-RU",{style:"currency",currency:"RUB",maximumFractionDigits:0}).format(Number(v)||0),date=v=>v?new Date(v).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"}):"—";
 function saveSession(value){state.session=value;if(value)localStorage.setItem("sg_admin_session",JSON.stringify(value));else localStorage.removeItem("sg_admin_session")}
+function pageLocation(){try{return window.parent&&window.parent!==window?window.parent.location:window.location}catch{return window.location}}
+function consumeMagicLink(){const page=pageLocation(),hash=new URLSearchParams(String(page.hash||"").replace(/^#/,"")),access_token=hash.get("access_token"),refresh_token=hash.get("refresh_token");if(!access_token||!refresh_token)return false;saveSession({access_token,refresh_token,token_type:hash.get("token_type")||"bearer",expires_in:Number(hash.get("expires_in"))||3600,expires_at:Math.floor(Date.now()/1000)+(Number(hash.get("expires_in"))||3600)});try{page.history.replaceState(null,"",page.pathname+page.search)}catch{}return true}
 async function authRequest(grant,body){const r=await fetch(AUTH_URL+"/token?grant_type="+grant,{method:"POST",headers:{"apikey":AUTH_KEY,"content-type":"application/json"},body:JSON.stringify(body)}),data=await r.json();if(!r.ok)throw new Error(data.error_description||data.msg||"Ошибка входа");data.expires_at=Math.floor(Date.now()/1000)+(data.expires_in||3600);saveSession(data);return data}
+async function sendOtpCode(){const email=el("email").value.trim();if(!email)throw new Error("Введите email администратора");const r=await fetch(ADMIN_URL+"/api/send-login-code",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({email})}),data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||"Не удалось отправить код");return email}
+async function verifyOtpCode(){const email=el("email").value.trim(),token=el("otpCode").value.replace(/\s/g,"");if(!email||!token)throw new Error("Введите email и одноразовый код");const r=await fetch(AUTH_URL+"/verify",{method:"POST",headers:{"apikey":AUTH_KEY,"content-type":"application/json"},body:JSON.stringify({email,token,type:"email"})}),data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error_description||data.msg||"Неверный или просроченный код");const session=data.session||data;if(!session.access_token||!session.refresh_token)throw new Error("Supabase не вернул сессию");session.expires_at=Math.floor(Date.now()/1000)+(session.expires_in||3600);saveSession(session);return session}
 async function ensureSession(){if(!state.session)throw new Error("Требуется вход");if((state.session.expires_at||0)>Math.floor(Date.now()/1000)+60)return state.session;return await authRequest("refresh_token",{refresh_token:state.session.refresh_token})}
 async function api(path,options={}){const session=await ensureSession(),headers={...(options.headers||{}),"authorization":"Bearer "+session.access_token};if(!(options.body instanceof FormData))headers["content-type"]="application/json";const r=await fetch(ADMIN_URL+"/"+path,{...options,headers}),b=await r.json();if(!r.ok)throw new Error(b.error||"Ошибка запроса");return b}
 function bars(id,rows,key="name"){const max=Math.max(1,...rows.map(x=>+x.value||0));el(id).innerHTML=rows.length?rows.map(x=>'<div class="barrow"><div class="barname" title="'+esc(x[key])+'">'+esc(x[key])+'</div><div class="bar"><i style="width:'+Math.max(3,(+x.value||0)/max*100)+'%"></i></div><b>'+esc(x.value)+'</b></div>').join(""):'<div class="sub">Пока нет данных</div>'}
 function render(d){const o=d.orders,c=d.article_product_cache||{};el("metrics").innerHTML=[["Заказы",o.total],["Выручка",money(o.revenue)],["Средний чек",money(o.average_check)],["Товаров продано",o.items],["Подарки",o.gifts],["С поздравлением",o.messages],["С промокодом",o.promocodes],["Каталог",d.catalog.products+" / "+d.catalog.articles],["Подборки статей",(c.cached_aliases||0)+" / "+(c.cached_products||0)]].map(x=>'<div class="metric card"><div class="sub">'+esc(x[0])+'</div><b>'+esc(x[1])+'</b></div>').join("");el("jobs").innerHTML=d.pipeline.map(j=>'<tr><td>'+esc(j.job_name)+'</td><td><span class="status '+(j.status==="success"?"success":"")+'"><i class="dot"></i>'+esc(j.status)+'</span></td><td>'+esc(j.processed_count)+'</td><td>'+date(j.finished_at||j.started_at)+'</td></tr>').join("");bars("daily",o.daily,"date");bars("products",o.top_products);bars("categories",o.top_categories);el("orders").innerHTML=o.recent.length?o.recent.map(x=>'<tr><td>…'+esc(x.order_id)+'</td><td>'+date(x.created_at)+'</td><td>'+esc(x.items)+'</td><td>'+money(x.total)+'</td></tr>').join(""):'<tr><td colspan="4" class="sub">Заказов за период нет</td></tr>';el("report").textContent=d.report}
 async function load(){el("refresh").disabled=true;try{render(await api("api/dashboard?days="+el("period").value));el("login").classList.add("hidden");el("app").classList.remove("hidden")}finally{el("refresh").disabled=false}}
-el("loginForm").addEventListener("submit",async e=>{e.preventDefault();el("loginError").textContent="";try{await authRequest("password",{email:el("email").value,password:el("password").value});await load()}catch(x){saveSession(null);el("loginError").textContent=x.message}});el("refresh").onclick=()=>load().catch(x=>alert(x.message));el("period").onchange=()=>load().catch(x=>alert(x.message));el("logout").onclick=()=>{saveSession(null);location.reload()};
-document.querySelectorAll("[data-action]").forEach(b=>b.onclick=async()=>{const action=b.dataset.action;if(action==="report"&&!confirm("Отправить отчёт на почту сейчас?"))return;if(!confirm("Запустить «"+b.firstChild.textContent.trim()+"»?"))return;b.disabled=true;const box=el("actionResult");box.classList.remove("hidden");box.textContent="Выполняется…";try{const r=await api("api/run",{method:"POST",body:JSON.stringify({action})});box.textContent=JSON.stringify(r,null,2);await load()}catch(x){box.textContent="Ошибка: "+x.message}finally{b.disabled=false}});if(state.session)load().catch(()=>saveSession(null));
-el("csvForm").addEventListener("submit",async e=>{e.preventDefault();const file=el("csvFile").files[0];if(!file)return;const button=el("csvButton"),box=el("csvResult"),form=new FormData();form.append("file",file);button.disabled=true;box.classList.remove("hidden");box.textContent="Загружаю и проверяю CSV…";try{box.textContent=JSON.stringify(await api("api/catalog-csv",{method:"POST",body:form}),null,2);await load()}catch(x){box.textContent="Ошибка: "+x.message}finally{button.disabled=false}});if(state.session)load().catch(()=>saveSession(null));
+el("emailForm").addEventListener("submit",async e=>{e.preventDefault();const button=el("sendCode");button.disabled=true;el("loginError").textContent="Отправляю одноразовый код…";try{await sendOtpCode();el("email").readOnly=true;el("emailForm").classList.add("hidden");el("codeForm").classList.remove("hidden");el("loginError").textContent="Код отправлен на почту. Введите его ниже.";el("otpCode").focus()}catch(x){el("loginError").textContent=x.message}finally{button.disabled=false}});
+el("codeForm").addEventListener("submit",async e=>{e.preventDefault();const button=el("verifyCode");button.disabled=true;el("loginError").textContent="Проверяю код…";try{await verifyOtpCode();await load()}catch(x){saveSession(null);el("loginError").textContent=x.message}finally{button.disabled=false}});
+el("changeEmail").onclick=()=>{el("email").readOnly=false;el("otpCode").value="";el("codeForm").classList.add("hidden");el("emailForm").classList.remove("hidden");el("loginError").textContent="";el("email").focus()};el("refresh").onclick=()=>load().catch(x=>alert(x.message));el("period").onchange=()=>load().catch(x=>alert(x.message));el("logout").onclick=()=>{saveSession(null);location.reload()};
+document.querySelectorAll("[data-action]").forEach(b=>b.onclick=async()=>{const action=b.dataset.action;if(action==="report"&&!confirm("Отправить отчёт на почту сейчас?"))return;if(!confirm("Запустить «"+b.firstChild.textContent.trim()+"»?"))return;b.disabled=true;const box=el("actionResult");box.classList.remove("hidden");box.textContent="Выполняется…";try{const r=await api("api/run",{method:"POST",body:JSON.stringify({action})});box.textContent=JSON.stringify(r,null,2);await load()}catch(x){box.textContent="Ошибка: "+x.message}finally{b.disabled=false}});
+el("csvForm").addEventListener("submit",async e=>{e.preventDefault();const file=el("csvFile").files[0];if(!file)return;const button=el("csvButton"),box=el("csvResult"),form=new FormData();form.append("file",file);button.disabled=true;box.classList.remove("hidden");box.textContent="Загружаю и проверяю CSV…";try{box.textContent=JSON.stringify(await api("api/catalog-csv",{method:"POST",body:form}),null,2);await load()}catch(x){box.textContent="Ошибка: "+x.message}finally{button.disabled=false}});consumeMagicLink();if(state.session)load().catch(()=>saveSession(null));
 </script></body></html>`;
 
 Deno.serve(async (req) => {
@@ -347,6 +436,20 @@ Deno.serve(async (req) => {
         "access-control-allow-methods": "GET,POST,OPTIONS",
       },
     });
+  }
+  if (url.pathname.endsWith("/api/send-login-code") && req.method === "POST") {
+    try {
+      const body = await req.json();
+      const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
+        "unknown";
+      await requestLoginCode(String(body?.email || ""), ip);
+      return json({ ok: true });
+    } catch (error) {
+      return json({
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }, 429);
+    }
   }
   if (url.pathname.endsWith("/api/dashboard")) {
     if (!await adminUser(req)) {
