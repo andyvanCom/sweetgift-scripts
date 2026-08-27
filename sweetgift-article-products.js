@@ -16,9 +16,9 @@ Legacy articles fall back to the last /stati/ URL segment.
   var STYLE_ID = 'sg-article-products-css';
   // Version the key so a previously cached empty response cannot hide a
   // newly configured or freshly rebuilt product selection.
-  var CACHE_PREFIX = 'sg_article_products_v4_';
+  var CACHE_PREFIX = 'sg_article_products_v5_';
   var CACHE_TTL = 15 * 60 * 1000;
-  var RETRY_DELAYS = [0, 1000];
+  var HEDGE_DELAY = 800;
   // Tilda can keep the main thread busy for well over six seconds while the
   // RPC has already returned 200. A short timer then wins the callback race
   // and discards a successful response. Allow the response callback to run.
@@ -304,21 +304,34 @@ Legacy articles fall back to the last /stati/ URL segment.
     });
   }
 
-  function requestAliasWithRetry(alias, attempt) {
-    attempt = attempt || 0;
+  function requestAliasWithFallback(alias) {
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var failures = [];
 
-    return new Promise(function (resolve) {
-      window.setTimeout(resolve, RETRY_DELAYS[attempt] || 0);
-    }).then(function () {
-      // Start with the CORS-simple read transport. If it stalls behind other
-      // page requests, retry through the regular JSON transport instead of
-      // repeating the same failure mode.
-      return requestAlias(alias, attempt > 0);
-    }).catch(function (error) {
-      if (attempt + 1 >= RETRY_DELAYS.length) throw error;
+      function succeed(data) {
+        if (settled) return;
+        settled = true;
+        resolve(data);
+      }
 
-      debug('RPC retry', alias, attempt + 2, error);
-      return requestAliasWithRetry(alias, attempt + 1);
+      function fail(error) {
+        failures.push(error);
+        if (!settled && failures.length >= 2) {
+          settled = true;
+          reject(failures[failures.length - 1]);
+        }
+      }
+
+      requestAlias(alias, false).then(succeed, fail);
+
+      // Tilda and other storefront modules can delay one browser transport
+      // even though Supabase itself is fast. Hedge with the regular JSON RPC
+      // instead of waiting for a long timeout before trying another path.
+      window.setTimeout(function () {
+        if (settled) return;
+        requestAlias(alias, true).then(succeed, fail);
+      }, HEDGE_DELAY);
     });
   }
 
@@ -333,7 +346,7 @@ Legacy articles fall back to the last /stati/ URL segment.
 
     // Load independent article sections concurrently. Serializing them makes
     // a lower section block the selection currently visible to the reader.
-    var request = requestAliasWithRetry(alias, 0).then(function (data) {
+    var request = requestAliasWithFallback(alias).then(function (data) {
       if (data) writeCache(alias, data);
       return data;
     });
