@@ -274,6 +274,53 @@ SweetGift.ru | Core
       });
   };
 
+  // Read-only RPC transport for public storefront data. Passing the
+  // publishable key in the query string and using a form body keeps this a
+  // CORS-simple request, so browsers do not have to wait for a separate
+  // preflight before loading article selections.
+  core.rpcRead = function (name, params, callback, errorCallback) {
+    var url = SUPABASE_URL + '/rest/v1/rpc/' + encodeURIComponent(name) +
+      '?apikey=' + encodeURIComponent(SUPABASE_KEY);
+    var body = new URLSearchParams();
+
+    Object.keys(params || {}).forEach(function (key) {
+      var value = params[key];
+      if (value !== undefined && value !== null) body.append(key, String(value));
+    });
+
+    fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+      },
+      body: body.toString()
+    })
+      .then(function (response) {
+        return response.text().then(function (responseBody) {
+          var data = responseBody ? safeJsonParse(responseBody, responseBody) : null;
+
+          if (!response.ok) {
+            var error = data && typeof data === 'object'
+              ? data
+              : { message: String(data || response.statusText), status: response.status };
+            throw error;
+          }
+
+          return data;
+        });
+      })
+      .then(function (data) {
+        if (callback) callback(data);
+      })
+      .catch(function (error) {
+        if (errorCallback) {
+          errorCallback(error);
+        } else {
+          warn('Read-only RPC error:', name, error);
+        }
+      });
+  };
+
   core.currentPath = function () {
     return window.location.pathname || '/';
   };

@@ -254,7 +254,14 @@ Legacy articles fall back to the last /stati/ URL segment.
 
   function requestAlias(alias) {
     return new Promise(function (resolve, reject) {
-      if (!window.SG || !window.SG.core || typeof window.SG.core.rpc !== 'function') {
+      if (
+        !window.SG ||
+        !window.SG.core ||
+        (
+          typeof window.SG.core.rpcRead !== 'function' &&
+          typeof window.SG.core.rpc !== 'function'
+        )
+      ) {
         reject(new Error('SweetGift Core is not ready'));
         return;
       }
@@ -273,7 +280,11 @@ Legacy articles fall back to the last /stati/ URL segment.
         callback(value);
       }
 
-      window.SG.core.rpc(
+      var rpc = typeof window.SG.core.rpcRead === 'function'
+        ? window.SG.core.rpcRead
+        : window.SG.core.rpc;
+
+      rpc(
         'get_article_products',
         { article_alias: alias },
         function (data) {
