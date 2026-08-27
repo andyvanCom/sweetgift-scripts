@@ -24,7 +24,6 @@ Legacy articles fall back to the last /stati/ URL segment.
   // and discards a successful response. Allow the response callback to run.
   var REQUEST_TIMEOUT = 30000;
   var pendingRequests = new Map();
-  var requestQueue = Promise.resolve();
   var observer = null;
 
   function debug() {
@@ -332,20 +331,11 @@ Legacy articles fall back to the last /stati/ URL segment.
 
     if (pendingRequests.has(alias)) return pendingRequests.get(alias);
 
-    // Supabase/Cloudflare can leave one of several simultaneous public RPC
-    // responses open. A short queue keeps multi-container articles reliable;
-    // cached aliases still render immediately without entering the queue.
-    var request = requestQueue.catch(function () {
-      return null;
-    }).then(function () {
-      return requestAliasWithRetry(alias, 0);
-    }).then(function (data) {
+    // Load independent article sections concurrently. Serializing them makes
+    // a lower section block the selection currently visible to the reader.
+    var request = requestAliasWithRetry(alias, 0).then(function (data) {
       if (data) writeCache(alias, data);
       return data;
-    });
-
-    requestQueue = request.catch(function () {
-      return null;
     });
 
     pendingRequests.set(alias, request);
