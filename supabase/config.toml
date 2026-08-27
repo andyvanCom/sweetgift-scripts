@@ -41,3 +41,8 @@ entrypoint = "./functions/admin-dashboard/index.ts"
 enabled = true
 verify_jwt = false
 entrypoint = "./functions/gift-selector-request/index.ts"
+
+[functions.article-products]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/article-products/index.ts"

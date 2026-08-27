@@ -12,6 +12,7 @@ Legacy articles fall back to the last /stati/ URL segment.
   'use strict';
 
   var MODULE_NAME = 'Article Products';
+  var EDGE_URL = 'https://rvgvbxipccbkytmhltmi.supabase.co/functions/v1/article-products?v=2';
   var ROOT_ATTR = 'data-sg-article-products';
   var STYLE_ID = 'sg-article-products-css';
   // Version the key so a previously cached empty response cannot hide a
@@ -304,6 +305,36 @@ Legacy articles fall back to the last /stati/ URL segment.
     });
   }
 
+  function requestAliasFromEdge(alias) {
+    var controller = typeof window.AbortController === 'function'
+      ? new window.AbortController()
+      : null;
+    var timeoutId = window.setTimeout(function () {
+      if (controller) controller.abort();
+    }, 12000);
+
+    return fetch(EDGE_URL + '&alias=' + encodeURIComponent(alias), {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller ? controller.signal : undefined
+    }).then(function (response) {
+      return response.text().then(function (body) {
+        var data;
+
+        try {
+          data = body ? JSON.parse(body) : null;
+        } catch (error) {
+          throw new Error('Invalid Edge response');
+        }
+
+        if (!response.ok) throw new Error(data && data.error || 'Edge request failed');
+        return data;
+      });
+    }).finally(function () {
+      window.clearTimeout(timeoutId);
+    });
+  }
+
   function requestAliasWithFallback(alias) {
     return new Promise(function (resolve, reject) {
       var settled = false;
@@ -323,14 +354,13 @@ Legacy articles fall back to the last /stati/ URL segment.
         }
       }
 
-      requestAlias(alias, false).then(succeed, fail);
+      requestAliasFromEdge(alias).then(succeed, fail);
 
-      // Tilda and other storefront modules can delay one browser transport
-      // even though Supabase itself is fast. Hedge with the regular JSON RPC
-      // instead of waiting for a long timeout before trying another path.
+      // Keep the existing public RPC as an independent fallback while the
+      // Edge response is served from its daily CDN cache.
       window.setTimeout(function () {
         if (settled) return;
-        requestAlias(alias, true).then(succeed, fail);
+        requestAlias(alias, false).then(succeed, fail);
       }, HEDGE_DELAY);
     });
   }
