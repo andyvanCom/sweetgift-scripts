@@ -12,12 +12,13 @@ Legacy articles fall back to the last /stati/ URL segment.
   'use strict';
 
   var MODULE_NAME = 'Article Products';
+  var STATIC_BASE = 'https://cdn.jsdelivr.net/gh/andyvanCom/sweetgift-scripts@main/article-products-cache/';
   var EDGE_URL = 'https://rvgvbxipccbkytmhltmi.functions.supabase.co/article-products?v=3';
   var ROOT_ATTR = 'data-sg-article-products';
   var STYLE_ID = 'sg-article-products-css';
   // Version the key so a previously cached empty response cannot hide a
   // newly configured or freshly rebuilt product selection.
-  var CACHE_PREFIX = 'sg_article_products_v7_';
+  var CACHE_PREFIX = 'sg_article_products_v8_';
   var CACHE_TTL = 15 * 60 * 1000;
   var HEDGE_DELAY = 800;
   // Tilda can keep the main thread busy for well over six seconds while the
@@ -25,7 +26,6 @@ Legacy articles fall back to the last /stati/ URL segment.
   // and discards a successful response. Allow the response callback to run.
   var REQUEST_TIMEOUT = 30000;
   var pendingRequests = new Map();
-  var requestQueue = Promise.resolve();
   var observer = null;
 
   function debug() {
@@ -336,6 +336,20 @@ Legacy articles fall back to the last /stati/ URL segment.
     });
   }
 
+  function requestAliasFromStaticCache(alias) {
+    var version = new Date().toISOString().slice(0, 10);
+    var url = STATIC_BASE + encodeURIComponent(alias) + '.json?v=' + version;
+
+    return fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      cache: 'force-cache'
+    }).then(function (response) {
+      if (!response.ok) throw new Error('Static cache HTTP ' + response.status);
+      return response.json();
+    });
+  }
+
   function requestAliasWithFallback(alias) {
     return new Promise(function (resolve, reject) {
       var settled = false;
@@ -349,20 +363,26 @@ Legacy articles fall back to the last /stati/ URL segment.
 
       function fail(error) {
         failures.push(error);
-        if (!settled && failures.length >= 2) {
+        if (!settled && failures.length >= 3) {
           settled = true;
           reject(failures[failures.length - 1]);
         }
       }
 
-      requestAliasFromEdge(alias).then(succeed, fail);
+      // Primary transport: immutable, precomputed JSON served by the same
+      // jsDelivr CDN that already delivers the storefront JavaScript.
+      requestAliasFromStaticCache(alias).then(succeed, fail);
 
-      // Keep the existing public RPC as an independent fallback while the
-      // Edge response is served from its daily CDN cache.
+      // Edge and PostgREST remain independent fallbacks during CDN refreshes.
+      window.setTimeout(function () {
+        if (settled) return;
+        requestAliasFromEdge(alias).then(succeed, fail);
+      }, HEDGE_DELAY);
+
       window.setTimeout(function () {
         if (settled) return;
         requestAlias(alias, false).then(succeed, fail);
-      }, HEDGE_DELAY);
+      }, HEDGE_DELAY * 2);
     });
   }
 
@@ -375,20 +395,11 @@ Legacy articles fall back to the last /stati/ URL segment.
 
     if (pendingRequests.has(alias)) return pendingRequests.get(alias);
 
-    // Cloudflare occasionally leaves one of two simultaneous HTTP/2 response
-    // streams open. The compact Edge endpoint is fast, so serialize the two
-    // article sections and avoid competing streams altogether.
-    var request = requestQueue.catch(function () {
-      return null;
-    }).then(function () {
-      return requestAliasWithFallback(alias);
-    }).then(function (data) {
+    // jsDelivr already serves many SweetGift assets concurrently and does not
+    // share the unstable Supabase connection used by the fallback transports.
+    var request = requestAliasWithFallback(alias).then(function (data) {
       if (data) writeCache(alias, data);
       return data;
-    });
-
-    requestQueue = request.catch(function () {
-      return null;
     });
 
     pendingRequests.set(alias, request);

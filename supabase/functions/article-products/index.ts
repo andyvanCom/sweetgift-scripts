@@ -29,7 +29,43 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
 
-  const alias = new URL(req.url).searchParams.get("alias")?.trim().toLowerCase() || "";
+  const requestUrl = new URL(req.url);
+
+  if (requestUrl.searchParams.get("manifest") === "1") {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return jsonResponse({ error: "Service configuration is unavailable" }, 500);
+    }
+
+    const page = Math.max(0, Math.min(10000, Number(requestUrl.searchParams.get("page")) || 0));
+    const pageSize = 100;
+    const offset = page * pageSize;
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/article_product_filters?select=alias&enabled=eq.true&order=alias&offset=${offset}&limit=${pageSize}`,
+      {
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+        },
+      },
+    );
+    const rows = await response.json();
+
+    if (!response.ok || !Array.isArray(rows)) {
+      return jsonResponse({ error: "Manifest request failed" }, 502);
+    }
+
+    return jsonResponse({
+      aliases: rows
+        .map((row: Record<string, unknown>) => String(row.alias || ""))
+        .filter((value: string) => /^[a-z0-9][a-z0-9-]{0,199}$/.test(value)),
+      has_more: rows.length === pageSize,
+    }, 200, true);
+  }
+
+  const alias = requestUrl.searchParams.get("alias")?.trim().toLowerCase() || "";
 
   if (!/^[a-z0-9][a-z0-9-]{0,199}$/.test(alias)) {
     return jsonResponse({ error: "Invalid alias" }, 400);

@@ -69,6 +69,17 @@ Frontend Modules
 - возвращает явный `Content-Length` и разрешает суточное CDN-кеширование;
 - не принимает секреты от frontend и не изменяет данные;
 - прямой PostgREST RPC остаётся резервным транспортом в frontend-модуле.
+- `manifest=1&page=N` выдаёт только страницы публичных Alias для ежедневного
+  экспорта статического кеша; закрытые поля таблицы наружу не передаются.
+
+## Static article product cache
+
+GitHub Actions workflow `article-products-cache.yml` ежедневно в `05:30 UTC`,
+после ночного пересчёта Supabase, запускает
+`scripts/export-article-products-cache.py`. Скрипт сохраняет отдельный
+компактный JSON для каждого включённого Alias в `article-products-cache/`.
+Frontend читает эти файлы через jsDelivr; Edge Function и PostgREST
+используются только как резервные каналы.
 
 ## gift-selector-request
 

@@ -1,0 +1,40 @@
+name: Refresh article products cache
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 5 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: article-products-cache
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Export cached selections
+        run: python scripts/export-article-products-cache.py
+
+      - name: Commit refreshed JSON
+        run: |
+          if git diff --quiet -- article-products-cache; then
+            echo "Article product cache is unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- article-products-cache
+          git commit -m "Refresh article product cache"
+          git push origin main
