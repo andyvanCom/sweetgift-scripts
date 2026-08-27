@@ -253,7 +253,7 @@ Legacy articles fall back to the last /stati/ URL segment.
     debug('Rendered', data.alias, data.products.length);
   }
 
-  function requestAlias(alias) {
+  function requestAlias(alias, useStandardRpc) {
     return new Promise(function (resolve, reject) {
       if (
         !window.SG ||
@@ -268,9 +268,13 @@ Legacy articles fall back to the last /stati/ URL segment.
       }
 
       var settled = false;
+      var requestHandle = null;
       var timeoutId = window.setTimeout(function () {
         if (settled) return;
         settled = true;
+        if (requestHandle && typeof requestHandle.abort === 'function') {
+          requestHandle.abort();
+        }
         reject(new Error('RPC request timed out'));
       }, REQUEST_TIMEOUT);
 
@@ -281,11 +285,11 @@ Legacy articles fall back to the last /stati/ URL segment.
         callback(value);
       }
 
-      var rpc = typeof window.SG.core.rpcRead === 'function'
+      var rpc = !useStandardRpc && typeof window.SG.core.rpcRead === 'function'
         ? window.SG.core.rpcRead
         : window.SG.core.rpc;
 
-      rpc(
+      requestHandle = rpc(
         'get_article_products',
         { article_alias: alias },
         function (data) {
@@ -304,7 +308,10 @@ Legacy articles fall back to the last /stati/ URL segment.
     return new Promise(function (resolve) {
       window.setTimeout(resolve, RETRY_DELAYS[attempt] || 0);
     }).then(function () {
-      return requestAlias(alias);
+      // Start with the CORS-simple read transport. If it stalls behind other
+      // page requests, retry through the regular JSON transport instead of
+      // repeating the same failure mode.
+      return requestAlias(alias, attempt > 0);
     }).catch(function (error) {
       if (attempt + 1 >= RETRY_DELAYS.length) throw error;
 

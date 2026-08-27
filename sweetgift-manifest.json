@@ -1,11 +1,11 @@
 {
-  "version": "1.0.25",
+  "version": "1.0.26",
   "modules": [
     {
       "name": "core",
       "enabled": true,
       "src": "sweetgift-core.js",
-      "version": "6",
+      "version": "7",
       "pages": ["all"]
     },
     {
@@ -54,7 +54,7 @@
       "name": "article-products",
       "enabled": true,
       "src": "sweetgift-article-products.js",
-      "version": "11",
+      "version": "12",
       "pages": ["/stati/*"]
     },
     {

@@ -288,13 +288,18 @@ SweetGift.ru | Core
       if (value !== undefined && value !== null) body.append(key, String(value));
     });
 
+    var controller = typeof window.AbortController === 'function'
+      ? new window.AbortController()
+      : null;
+
     fetch(url, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
       },
-      body: body.toString()
+      body: body.toString(),
+      signal: controller ? controller.signal : undefined
     })
       .then(function (response) {
         return response.text().then(function (responseBody) {
@@ -320,6 +325,10 @@ SweetGift.ru | Core
           warn('Read-only RPC error:', name, error);
         }
       });
+
+    // Callers with their own timeout can cancel the underlying fetch instead
+    // of only abandoning its callback and leaving a stuck request alive.
+    return controller;
   };
 
   core.currentPath = function () {
