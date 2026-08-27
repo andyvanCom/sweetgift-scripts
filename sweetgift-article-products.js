@@ -12,12 +12,12 @@ Legacy articles fall back to the last /stati/ URL segment.
   'use strict';
 
   var MODULE_NAME = 'Article Products';
-  var EDGE_URL = 'https://rvgvbxipccbkytmhltmi.supabase.co/functions/v1/article-products?v=2';
+  var EDGE_URL = 'https://rvgvbxipccbkytmhltmi.functions.supabase.co/article-products?v=3';
   var ROOT_ATTR = 'data-sg-article-products';
   var STYLE_ID = 'sg-article-products-css';
   // Version the key so a previously cached empty response cannot hide a
   // newly configured or freshly rebuilt product selection.
-  var CACHE_PREFIX = 'sg_article_products_v5_';
+  var CACHE_PREFIX = 'sg_article_products_v6_';
   var CACHE_TTL = 15 * 60 * 1000;
   var HEDGE_DELAY = 800;
   // Tilda can keep the main thread busy for well over six seconds while the

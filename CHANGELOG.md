@@ -20,6 +20,8 @@
   после длинного таймаута; frontend использует первый успешный ответ.
 - готовые суточные подборки отдаются через отдельный Edge GET endpoint с
   явной длиной ответа и суточным CDN-кешем; PostgREST остаётся fallback.
+- frontend использует выделенный домен `functions.supabase.co`, чтобы запросы
+  подборок не делили зависающее соединение с остальными Supabase-модулями.
 
 ## Admin authentication and operational state
 
