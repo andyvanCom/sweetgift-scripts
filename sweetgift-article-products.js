@@ -153,13 +153,18 @@ Legacy articles fall back to the last /stati/ URL segment.
       '.sg-article-products__links{display:flex;flex-wrap:wrap;gap:9px;}',
       '.sg-article-products__link{display:inline-flex;padding:9px 13px;border:1px solid #dfc8c3;border-radius:999px;background:#fff;color:var(--sg-ap-brand)!important;text-decoration:none!important;font-size:14px;line-height:1.3;transition:border-color .2s,background .2s;}',
       '.sg-article-products__link:hover{border-color:var(--sg-ap-brand);background:#fff4f6;}',
+      '.sg-article-products__nav:not(.sg-article-products__nav--expanded) .sg-article-products__link:nth-child(n+9){display:none;}',
+      '.sg-article-products__more{display:inline-flex;align-items:center;justify-content:center;margin-top:14px;padding:10px 17px;border:1px solid #dfc8c3;border-radius:999px;background:#fff;color:var(--sg-ap-brand);font:inherit;font-size:14px;line-height:1.3;font-weight:650;cursor:pointer;transition:border-color .2s,background .2s;}',
+      '.sg-article-products__more:hover{border-color:var(--sg-ap-brand);background:#fff4f6;}',
+      '.sg-article-products__more:focus-visible{outline:3px solid rgba(182,38,81,.2);outline-offset:2px;}',
+      '.sg-article-products__nav--mobile-only .sg-article-products__more{display:none;}',
       '.sg-article-products--state{margin-top:24px;margin-bottom:24px;padding:22px 24px;text-align:center;}',
       '.sg-article-products__status{margin:0;color:var(--sg-ap-muted);font-size:15px;line-height:1.5;}',
       '.sg-article-products__status--loading:before{content:"";display:inline-block;width:14px;height:14px;margin-right:9px;border:2px solid #eadfdd;border-top-color:var(--sg-ap-brand);border-radius:50%;vertical-align:-2px;animation:sg-ap-spin .8s linear infinite;}',
       '.sg-article-products__status--error{color:#9a284d;}',
       '@keyframes sg-ap-spin{to{transform:rotate(360deg);}}',
       '@media(max-width:1080px){.sg-article-products__grid{grid-template-columns:repeat(3,minmax(0,1fr));}}',
-      '@media(max-width:760px){.sg-article-products{margin:36px 0 24px;padding:20px 16px;border-radius:20px;}.sg-article-products__title{font-size:25px;}.sg-article-products__subtitle{font-size:14px;}.sg-article-products__grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}.sg-article-products__body{min-height:160px;padding:12px;}.sg-article-products__name{font-size:14px;}.sg-article-products__price{font-size:17px;}.sg-article-products__button{font-size:13px;}}',
+      '@media(max-width:760px){.sg-article-products{margin:36px 0 24px;padding:20px 16px;border-radius:20px;}.sg-article-products__title{font-size:25px;}.sg-article-products__subtitle{font-size:14px;}.sg-article-products__grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}.sg-article-products__body{min-height:160px;padding:12px;}.sg-article-products__name{font-size:14px;}.sg-article-products__price{font-size:17px;}.sg-article-products__button{font-size:13px;}.sg-article-products__nav:not(.sg-article-products__nav--expanded) .sg-article-products__link:nth-child(n+6){display:none;}.sg-article-products__nav--mobile-only .sg-article-products__more{display:inline-flex;}}',
       '@media(max-width:420px){.sg-article-products__grid{grid-template-columns:1fr;}.sg-article-products__body{min-height:0;}.sg-article-products__image{aspect-ratio:4/3;}}'
     ].join('');
 
@@ -212,21 +217,48 @@ Legacy articles fall back to the last /stati/ URL segment.
   function navigationHtml(items) {
     if (!Array.isArray(items) || !items.length) return '';
 
+    var links = items.map(function (item) {
+      item = item && typeof item === 'object' ? item : {};
+      var url = safeUrl(item.url);
+      if (!url) return '';
+
+      return '<a class="sg-article-products__link" href="' +
+        escapeHtml(url) + '">' + escapeHtml(item.title) + '</a>';
+    }).filter(Boolean);
+
+    if (!links.length) return '';
+
+    var navClass = 'sg-article-products__nav';
+    if (links.length > 5 && links.length <= 8) {
+      navClass += ' sg-article-products__nav--mobile-only';
+    }
+
     return [
-      '<nav class="sg-article-products__nav" aria-label="Материалы о сырах">',
+      '<nav class="', navClass, '" aria-label="Читайте также">',
         '<h3 class="sg-article-products__nav-title">Читайте также</h3>',
         '<div class="sg-article-products__links">',
-          items.map(function (item) {
-            item = item && typeof item === 'object' ? item : {};
-            var url = safeUrl(item.url);
-            if (!url) return '';
-
-            return '<a class="sg-article-products__link" href="' +
-              escapeHtml(url) + '">' + escapeHtml(item.title) + '</a>';
-          }).join(''),
+          links.join(''),
         '</div>',
+        links.length > 5
+          ? '<button class="sg-article-products__more" type="button" aria-expanded="false">Показать больше</button>'
+          : '',
       '</nav>'
     ].join('');
+  }
+
+  function initNavigation(container) {
+    var buttons = container.querySelectorAll('.sg-article-products__more');
+
+    Array.prototype.forEach.call(buttons, function (button) {
+      button.addEventListener('click', function () {
+        var nav = button.closest('.sg-article-products__nav');
+        if (!nav) return;
+
+        var expanded = nav.classList.toggle('sg-article-products__nav--expanded');
+        button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        button.textContent = expanded ? 'Скрыть' : 'Показать больше';
+      });
+    });
   }
 
   function render(container, data) {
@@ -250,6 +282,8 @@ Legacy articles fall back to the last /stati/ URL segment.
       navigationHtml(data.navigation),
       '</section>'
     ].join('');
+
+    initNavigation(container);
 
     container.setAttribute(ROOT_ATTR, '1');
     container.setAttribute('data-sg-state', 'loaded');
