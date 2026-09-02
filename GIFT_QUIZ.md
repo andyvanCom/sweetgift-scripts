@@ -1,5 +1,7 @@
 # SweetGift Gift Quiz
 
+Актуально на 2026-09-02.
+
 ## Tilda T123
 
 ```html
@@ -47,9 +49,9 @@ the unified quiz do not maintain separate product lists. Strawberry products
 are selected from the existing chocolate-strawberry, strawberry-bouquet,
 strawberry-and-flowers and chocolate-fruit categories.
 
-The production catalog audit on 2026-08-14 found 784 available priced products:
-185 below 5,000 ₽; 69 from 5,000–6,999 ₽; 167 from 7,000–9,999 ₽; 186 from
-10,000–14,999 ₽; and 177 from 15,000 ₽. Therefore the proposed ranges were kept.
+Бюджетные диапазоны являются частью UX и ранжирования, но фактическое число
+товаров нельзя фиксировать в документации: оно меняется после каждого импорта.
+Для проверки используется актуальный `products_catalog` и результат RPC.
 
 ## Known data limitations
 
@@ -63,3 +65,7 @@ Quiz state is stored in `sessionStorage` and mirrored to query parameters so a
 selection can be shared. Funnel events are appended to `gift_quiz_events` only
 through `track_gift_quiz_event`; the table itself is unavailable to frontend
 roles.
+
+Специализированные алкогольные разделы исключаются серверной логикой, общей с
+остальными публичными подборками. После изменения правил каталога или состава
+необходимо проверить обе ветки корзин/боксов и отдельную ветку клубники.

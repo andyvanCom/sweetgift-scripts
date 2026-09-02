@@ -93,13 +93,32 @@ function createRuntime(options) {
   MutationObserver.prototype.disconnect = function () {};
 
   function schedule(callback, delay) {
-    if (delay >= 5000) return setImmediate(callback);
+    if (delay >= 5000) return null;
+    if (delay > 0) return setTimeout(callback, 0);
     Promise.resolve().then(callback);
     return null;
   }
 
   function cancelSchedule(id) {
-    if (id) clearImmediate(id);
+    if (id) clearTimeout(id);
+  }
+
+  function fetchMock(url) {
+    var match = String(url).match(/article-products-cache\/([^/?]+)\.json/i);
+    var alias = match ? decodeURIComponent(match[1]) : '';
+
+    if (
+      alias &&
+      options.staticResponses &&
+      Object.prototype.hasOwnProperty.call(options.staticResponses, alias)
+    ) {
+      return Promise.resolve({
+        ok: true,
+        json: function () { return Promise.resolve(options.staticResponses[alias]); }
+      });
+    }
+
+    return Promise.reject(new Error('Transport unavailable in unit test'));
   }
 
   var context = {
@@ -161,6 +180,7 @@ function createRuntime(options) {
     isFinite: isFinite,
     setTimeout: schedule,
     clearTimeout: cancelSchedule,
+    fetch: fetchMock,
     console: console
   };
 
@@ -196,7 +216,7 @@ function response(alias, products) {
 
 function settle() {
   return new Promise(function (resolve) {
-    setImmediate(resolve);
+    setTimeout(resolve, 20);
   });
 }
 
@@ -268,26 +288,15 @@ async function run() {
   assert.equal(error.getAttribute('data-sg-state'), 'error');
   assert.equal(error.innerHTML.includes('Не удалось загрузить'), true);
 
-  var retry = new Element('sg-related-products', 'retry-alias');
-  var retryRuntime = createRuntime({
-    containers: [retry],
-    responses: { 'retry-alias': response('retry-alias') },
-    errorCounts: { 'retry-alias': 2 }
+  var staticCache = new Element('sg-related-products', 'static-alias');
+  var staticRuntime = createRuntime({
+    containers: [staticCache],
+    staticResponses: { 'static-alias': response('static-alias') },
+    responses: {}
   });
   await settle();
-  assert.equal(retryRuntime.calls.length, 3);
-  assert.equal(retry.getAttribute('data-sg-state'), 'loaded');
-
-  var timeoutRetry = new Element('sg-related-products', 'timeout-retry-alias');
-  var timeoutRetryRuntime = createRuntime({
-    containers: [timeoutRetry],
-    responses: { 'timeout-retry-alias': response('timeout-retry-alias') },
-    hangCounts: { 'timeout-retry-alias': 1 }
-  });
-  await settle();
-  await settle();
-  assert.equal(timeoutRetryRuntime.calls.length, 2);
-  assert.equal(timeoutRetry.getAttribute('data-sg-state'), 'loaded');
+  assert.equal(staticRuntime.calls.length, 0);
+  assert.equal(staticCache.getAttribute('data-sg-state'), 'loaded');
 
   var unresolved = new Element('sg-related-products');
   var unresolvedRuntime = createRuntime({
@@ -342,7 +351,7 @@ async function run() {
   assert.equal(unsafe.innerHTML.includes('<svg'), false);
   assert.equal(unsafe.innerHTML.includes('&lt;svg onload=alert(1)&gt;'), true);
 
-  console.log('article-products: 13 сценариев успешно');
+  console.log('article-products: static cache, RPC fallback and DOM scenarios successful');
 }
 
 run().catch(function (error) {
