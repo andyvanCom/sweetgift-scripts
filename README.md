@@ -2,6 +2,9 @@
 
 Репозиторий frontend-модулей и Supabase Edge Functions для SweetGift.ru.
 
+Для продолжения разработки на компьютере Apollo1 используйте
+[`APOLLO1_HANDOFF.md`](APOLLO1_HANDOFF.md).
+
 Проект используется для:
 
 - динамической загрузки JS-модулей сайта;
