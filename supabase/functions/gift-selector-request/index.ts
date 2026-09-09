@@ -11,6 +11,10 @@ const REQUEST_TO_EMAIL =
 const REQUEST_FROM_EMAIL =
   Deno.env.get("REPORT_FROM_EMAIL") || "SweetGift <no-reply@sweetgift.ru>";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const NEUROMARIA_INTERNAL_URL = (
+  Deno.env.get("NEUROMARIA_INTERNAL_URL") || "https://api.sweetgift.ru"
+).replace(/\/$/, "");
+const NEUROMARIA_INTERNAL_TOKEN = Deno.env.get("NEUROMARIA_INTERNAL_TOKEN") || "";
 
 const ALLOWED_ORIGINS = new Set([
   "https://sweetgift.ru",
@@ -123,6 +127,34 @@ async function sendEmail(to: string, subject: string, html: string) {
   } finally {
     await client.close();
   }
+}
+
+async function createCrmLead(payload: Record<string, unknown>) {
+  if (!NEUROMARIA_INTERNAL_TOKEN) {
+    throw new Error("NEUROMARIA_INTERNAL_TOKEN is not configured");
+  }
+
+  const result = await fetch(
+    `${NEUROMARIA_INTERNAL_URL}/internal/gift-selector/leads`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${NEUROMARIA_INTERNAL_TOKEN}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    },
+  );
+
+  if (!result.ok) {
+    throw new Error(`amoCRM lead creation failed (${result.status})`);
+  }
+
+  const body = await result.json() as { leadId?: number };
+  if (!Number.isInteger(body.leadId)) {
+    throw new Error("amoCRM lead creation returned no lead id");
+  }
+  return body.leadId as number;
 }
 
 function rateLimited(req: Request) {
@@ -301,20 +333,38 @@ Deno.serve(async (req) => {
       page_url: pageUrl,
     });
 
-    const [adminResult, customerResult] = await Promise.allSettled([
+    const crmPayload = {
+      requestId,
+      requestType,
+      ingredients,
+      quantity,
+      budget,
+      comment,
+      pageUrl,
+      customer: { name, phone, email },
+    };
+    const [adminResult, customerResult, crmResult] = await Promise.allSettled([
       sendEmail(REQUEST_TO_EMAIL, subject, adminHtml),
       sendEmail(email, customerSubject, customerHtml),
+      createCrmLead(crmPayload),
     ]);
     const adminSent = adminResult.status === "fulfilled";
     const customerSent = customerResult.status === "fulfilled";
     const emailErrors = [adminResult, customerResult]
       .filter((result) => result.status === "rejected")
       .map((result) => clean(String((result as PromiseRejectedResult).reason), 500));
+    const crmCreated = crmResult.status === "fulfilled";
+    const crmError = crmResult.status === "rejected"
+      ? clean(String(crmResult.reason), 500)
+      : null;
 
     await updateEmailStatus(requestId, {
       admin_email_status: adminSent ? "sent" : "failed",
       customer_email_status: customerSent ? "sent" : "failed",
       last_email_error: emailErrors.join(" | ") || null,
+      crm_status: crmCreated ? "created" : "failed",
+      crm_lead_id: crmCreated ? crmResult.value : null,
+      last_crm_error: crmError,
     });
 
     console.log("gift-selector-request sent", {
@@ -325,10 +375,17 @@ Deno.serve(async (req) => {
       recipient: REQUEST_TO_EMAIL,
       admin_email_sent: adminSent,
       customer_email_sent: customerSent,
+      crm_created: crmCreated,
+      crm_lead_id: crmCreated ? crmResult.value : null,
     });
 
     return response(
-      { ok: true, request_id: requestId, confirmation_sent: customerSent },
+      {
+        ok: true,
+        request_id: requestId,
+        confirmation_sent: customerSent,
+        crm_created: crmCreated,
+      },
       200,
       allowedOrigin,
     );
