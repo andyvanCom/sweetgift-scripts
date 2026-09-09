@@ -18,7 +18,7 @@ Legacy articles fall back to the last /stati/ URL segment.
   var STYLE_ID = 'sg-article-products-css';
   // Version the key so a previously cached empty response cannot hide a
   // newly configured or freshly rebuilt product selection.
-  var CACHE_PREFIX = 'sg_article_products_v10_';
+  var CACHE_PREFIX = 'sg_article_products_v11_';
   var STATIC_CACHE_REVISION = '2';
   var CACHE_TTL = 15 * 60 * 1000;
   var HEDGE_DELAY = 800;
@@ -406,14 +406,14 @@ Legacy articles fall back to the last /stati/ URL segment.
         }
       }
 
-      // Primary transport: immutable, precomputed JSON served by the same
-      // jsDelivr CDN that already delivers the storefront JavaScript.
-      requestAliasFromStaticCache(alias).then(succeed, fail);
+      // Primary transport: the Edge endpoint reads the precomputed daily
+      // article cache. This avoids stale browser/CDN snapshots after a rebuild.
+      requestAliasFromEdge(alias).then(succeed, fail);
 
-      // Edge and PostgREST remain independent fallbacks during CDN refreshes.
+      // Static JSON and PostgREST remain independent fallbacks.
       window.setTimeout(function () {
         if (settled) return;
-        requestAliasFromEdge(alias).then(succeed, fail);
+        requestAliasFromStaticCache(alias).then(succeed, fail);
       }, HEDGE_DELAY);
 
       window.setTimeout(function () {
