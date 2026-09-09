@@ -18,7 +18,8 @@ Legacy articles fall back to the last /stati/ URL segment.
   var STYLE_ID = 'sg-article-products-css';
   // Version the key so a previously cached empty response cannot hide a
   // newly configured or freshly rebuilt product selection.
-  var CACHE_PREFIX = 'sg_article_products_v9_';
+  var CACHE_PREFIX = 'sg_article_products_v10_';
+  var STATIC_CACHE_REVISION = '2';
   var CACHE_TTL = 15 * 60 * 1000;
   var HEDGE_DELAY = 800;
   // Tilda can keep the main thread busy for well over six seconds while the
@@ -371,7 +372,7 @@ Legacy articles fall back to the last /stati/ URL segment.
   }
 
   function requestAliasFromStaticCache(alias) {
-    var version = new Date().toISOString().slice(0, 10);
+    var version = new Date().toISOString().slice(0, 10) + '-' + STATIC_CACHE_REVISION;
     var url = STATIC_BASE + encodeURIComponent(alias) + '.json?v=' + version;
 
     return fetch(url, {
