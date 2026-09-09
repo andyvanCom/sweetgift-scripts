@@ -1,5 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { SMTPClient } from "https://deno.land/x/denomailer/mod.ts";
+import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 
 const SMTP_HOST = Deno.env.get("SMTP_HOST") || "smtp.yandex.ru";
 const SMTP_PORT = Number(Deno.env.get("SMTP_PORT") || "465");
@@ -10,10 +10,12 @@ const REQUEST_TO_EMAIL =
   "sweetgift.ru@gmail.com";
 const REQUEST_FROM_EMAIL =
   Deno.env.get("REPORT_FROM_EMAIL") || "SweetGift <no-reply@sweetgift.ru>";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 
 const ALLOWED_ORIGINS = new Set([
   "https://sweetgift.ru",
   "https://www.sweetgift.ru",
+  "https://app.sweetgift.ru",
 ]);
 
 const requestsByIp = new Map<string, number[]>();
@@ -46,6 +48,81 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function databaseKey() {
+  const configured = Deno.env.get("SUPABASE_SECRET_KEYS");
+  if (configured) {
+    const keys = JSON.parse(configured) as Record<string, string>;
+    if (keys.default) return keys.default;
+  }
+
+  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+}
+
+async function saveRequest(payload: Record<string, unknown>) {
+  const key = databaseKey();
+  const headers: Record<string, string> = {
+    apikey: key,
+    "content-type": "application/json",
+    prefer: "return=minimal",
+  };
+
+  if (!key.startsWith("sb_secret_")) {
+    headers.authorization = `Bearer ${key}`;
+  }
+
+  const result = await fetch(`${SUPABASE_URL}/rest/v1/gift_selector_requests`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  });
+
+  if (!result.ok) {
+    throw new Error(`request persistence failed (${result.status})`);
+  }
+}
+
+async function updateEmailStatus(
+  requestId: string,
+  values: Record<string, unknown>,
+) {
+  const key = databaseKey();
+  const headers: Record<string, string> = {
+    apikey: key,
+    "content-type": "application/json",
+    prefer: "return=minimal",
+  };
+
+  if (!key.startsWith("sb_secret_")) {
+    headers.authorization = `Bearer ${key}`;
+  }
+
+  const result = await fetch(
+    `${SUPABASE_URL}/rest/v1/gift_selector_requests?request_id=eq.${encodeURIComponent(requestId)}`,
+    { method: "PATCH", headers, body: JSON.stringify(values) },
+  );
+
+  if (!result.ok) {
+    console.error("gift-selector-request status update failed", result.status);
+  }
+}
+
+async function sendEmail(to: string, subject: string, html: string) {
+  const client = new SMTPClient({
+    connection: {
+      hostname: SMTP_HOST,
+      port: SMTP_PORT,
+      tls: true,
+      auth: { username: SMTP_USER, password: SMTP_PASSWORD },
+    },
+  });
+
+  try {
+    await client.send({ from: REQUEST_FROM_EMAIL, to, subject, html });
+  } finally {
+    await client.close();
+  }
 }
 
 function rateLimited(req: Request) {
@@ -168,13 +245,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    const requestId = crypto.randomUUID().split("-")[0].toUpperCase();
+    const requestId = `SG-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${crypto.randomUUID().split("-")[0].toUpperCase()}`;
     // Denomailer/Q-encoding is rendered literally by some Gmail clients when
     // the subject contains Cyrillic. Keep the header ASCII-only; all Russian
     // request details remain in the UTF-8 HTML body.
     const subject =
       `SweetGift custom ${requestType === "gift_box" ? "gift set" : "basket"} request ${requestId} - ${quantity} pcs`;
-    const html = `
+    const adminHtml = `
       <meta charset="UTF-8">
       <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.55;color:#222;">
         <div style="max-width:720px;margin:0 auto;padding:24px;">
@@ -194,29 +271,51 @@ Deno.serve(async (req) => {
         </div>
       </div>
     `;
+    const customerSubject = `SweetGift request ${requestId} received`;
+    const customerHtml = `
+      <meta charset="UTF-8">
+      <div style="font-family:Arial,sans-serif;font-size:16px;line-height:1.55;color:#222;">
+        <div style="max-width:680px;margin:0 auto;padding:24px;">
+          <h2 style="margin:0 0 18px;">Мы получили ваш запрос</h2>
+          <p>Здравствуйте, ${escapeHtml(name)}!</p>
+          <p>Ваш номер: <b>${requestId}</b>. Сохраните его — по этому номеру менеджер сможет быстро найти обращение.</p>
+          <p><b>Что подобрать:</b> ${requestType === "gift_box" ? "подарочный набор" : "подарочную корзину"}<br>
+          <b>Состав:</b> ${escapeHtml(ingredients.join(", "))}<br>
+          <b>Количество:</b> ${quantity} шт.<br>
+          <b>Бюджет:</b> ${budget.toLocaleString("ru-RU")} ₽ за шт.</p>
+          <p>Менеджер SweetGift проверит возможность изготовления и свяжется с вами.</p>
+        </div>
+      </div>
+    `;
 
-    const client = new SMTPClient({
-      connection: {
-        hostname: SMTP_HOST,
-        port: SMTP_PORT,
-        tls: true,
-        auth: {
-          username: SMTP_USER,
-          password: SMTP_PASSWORD,
-        },
-      },
+    await saveRequest({
+      request_id: requestId,
+      request_type: requestType,
+      ingredients,
+      quantity,
+      budget,
+      customer_name: name,
+      customer_phone: phone,
+      customer_email: email,
+      comment,
+      page_url: pageUrl,
     });
 
-    try {
-      await client.send({
-        from: REQUEST_FROM_EMAIL,
-        to: REQUEST_TO_EMAIL,
-        subject,
-        html,
-      });
-    } finally {
-      await client.close();
-    }
+    const [adminResult, customerResult] = await Promise.allSettled([
+      sendEmail(REQUEST_TO_EMAIL, subject, adminHtml),
+      sendEmail(email, customerSubject, customerHtml),
+    ]);
+    const adminSent = adminResult.status === "fulfilled";
+    const customerSent = customerResult.status === "fulfilled";
+    const emailErrors = [adminResult, customerResult]
+      .filter((result) => result.status === "rejected")
+      .map((result) => clean(String((result as PromiseRejectedResult).reason), 500));
+
+    await updateEmailStatus(requestId, {
+      admin_email_status: adminSent ? "sent" : "failed",
+      customer_email_status: customerSent ? "sent" : "failed",
+      last_email_error: emailErrors.join(" | ") || null,
+    });
 
     console.log("gift-selector-request sent", {
       request_id: requestId,
@@ -224,9 +323,15 @@ Deno.serve(async (req) => {
       quantity,
       item_type: itemLabel,
       recipient: REQUEST_TO_EMAIL,
+      admin_email_sent: adminSent,
+      customer_email_sent: customerSent,
     });
 
-    return response({ ok: true, request_id: requestId }, 200, allowedOrigin);
+    return response(
+      { ok: true, request_id: requestId, confirmation_sent: customerSent },
+      200,
+      allowedOrigin,
+    );
   } catch (error) {
     console.error("gift-selector-request", error);
     return response(
