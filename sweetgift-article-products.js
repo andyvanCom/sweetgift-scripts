@@ -13,12 +13,12 @@ Legacy articles fall back to the last /stati/ URL segment.
 
   var MODULE_NAME = 'Article Products';
   var STATIC_BASE = 'https://cdn.jsdelivr.net/gh/andyvanCom/sweetgift-scripts@main/article-products-cache/';
-  var EDGE_URL = 'https://rvgvbxipccbkytmhltmi.functions.supabase.co/article-products?v=3';
+  var EDGE_URL = 'https://rvgvbxipccbkytmhltmi.functions.supabase.co/article-products?v=4';
   var ROOT_ATTR = 'data-sg-article-products';
   var STYLE_ID = 'sg-article-products-css';
   // Version the key so a previously cached empty response cannot hide a
   // newly configured or freshly rebuilt product selection.
-  var CACHE_PREFIX = 'sg_article_products_v11_';
+  var CACHE_PREFIX = 'sg_article_products_v12_';
   var STATIC_CACHE_REVISION = '2';
   var CACHE_TTL = 15 * 60 * 1000;
   var HEDGE_DELAY = 800;

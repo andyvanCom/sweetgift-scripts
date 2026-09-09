@@ -54,7 +54,7 @@
       "name": "article-products",
       "enabled": true,
       "src": "sweetgift-article-products.js",
-      "version": "23",
+      "version": "24",
       "pages": ["/stati/*"]
     },
     {
