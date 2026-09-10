@@ -67,9 +67,12 @@ function extractComposition(description: string | null): string | null {
 
   const clean = description
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/(?:p|div|li|tr|td|ul|ol|h[1-6])>/gi, "\n")
+    .replace(/<(?:p|div|li|tr|td|ul|ol|h[1-6])\b[^>]*>/gi, "\n")
     .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/g, " ")
+    .replace(/&(?:amp;)?nbsp;?|#nbsp;?/gi, " ")
+    .replace(/\r/g, "\n")
+    .replace(/\n{2,}/g, "\n")
     .trim();
 
   const marker = "В состав";
@@ -83,10 +86,36 @@ function extractComposition(description: string | null): string | null {
 function splitIngredients(composition: string | null): string[] {
   if (!composition) return [];
 
-  return composition
+  // Long prose-only descriptions are marketing copy, not a composition.
+  // Do not turn whole paragraphs into fake ingredient entities.
+  if (
+    composition.length > 400 &&
+    !/\d+(?:[.,]\d+)?\s*(?:грамм(?:а|ов)?|гр\.?|г|кг|мл|л|шт\.?|штук)(?:\s|$|[А-ЯЁ])/i.test(composition)
+  ) return [];
+
+  const separated = composition
+    .replace(/&(?:amp;)?nbsp;?|#nbsp;?/gi, " ")
+    // A frequent Tilda export defect removes the separator after a weight:
+    // `125 граммСыр ...`. Restore that unambiguous boundary first.
+    .replace(
+      /(\d+(?:[.,]\d+)?\s*(?:грамм(?:а|ов)?|гр\.?|г|кг|мл|л|шт\.?|штук|бутылк[аи]?))(?=[А-ЯЁа-яё])/gi,
+      "$1\n",
+    )
+    // Some rows have no weight, but the following product starts with a
+    // stable catalogue noun and an uppercase letter.
+    .replace(
+      /([а-яё)\]])(?=(?:Ананас|Артишоки|Варенье|Ветчина|Джем|Икра|Колбаса|Конфеты|Кофе|Мёд|Мед|Мясо|Напиток|Оливки|Орехи|Паштет|Печенье|Риет|Рийет|Рулет|Сыр|Чай|Шоколад)\b)/g,
+      "$1\n",
+    );
+
+  const ignored = /^(?:внимание|возможно изменени|срок изготовлен|специальн(?:ое|ые) предложен|корзин(?:а|ы)?\b|ящик\b|упаковк\b|бант\b|декор\b|флористическ|зелень\b|бумажный наполнитель\b)/i;
+  const measurementOnly = /^\s*\d+(?:[.,]\d+)?\s*(?:грамм(?:а|ов)?|гр\.?|г|кг|мл|л|шт\.?|штук|веточ(?:ка|ки|ек)?|см)?\s*$/i;
+
+  return separated
     .split(/\n|;|•|—/g)
     .map((x) => x
       .replace(/^[-–—\s]+/, "")
+      .replace(/^[а-яё](?=[А-ЯЁ])/, "")
       // Tilda/YML sometimes stores the whole composition on one line after
       // this heading. Remove only the heading, not the ingredients following
       // it (the former filter discarded the complete line).
@@ -95,7 +124,9 @@ function splitIngredients(composition: string | null): string[] {
     .filter((x) => x.length > 2)
     .filter((x) => !/^в состав/i.test(x))
     .filter((x) => !/^дxшxв/i.test(x))
-    .filter((x) => !/^вес/i.test(x));
+    .filter((x) => !/^вес/i.test(x))
+    .filter((x) => !ignored.test(x))
+    .filter((x) => !measurementOnly.test(x));
 }
 
 function normalizeIngredient(value: string): string {
@@ -340,7 +371,10 @@ serve(async () => {
           tag,
           weight_text: extractWeight(ingredient),
         }));
-      });
+      }).filter((row, index, rows) => rows.findIndex((candidate) =>
+        candidate.ingredient_normalized === row.ingredient_normalized &&
+        candidate.tag === row.tag
+      ) === index);
 
       // A YML can contain several offers with the same product URL. Preserve
       // the old sequential-import semantics: the last offer wins completely.
@@ -461,6 +495,13 @@ serve(async () => {
         .in("product_key", chunk);
 
       if (deactivateError) throw deactivateError;
+
+      const { error: removeObsoleteIngredientsError } = await supabase
+        .from("product_ingredients")
+        .delete()
+        .in("product_key", chunk);
+
+      if (removeObsoleteIngredientsError) throw removeObsoleteIngredientsError;
       deactivated += chunk.length;
     }
 
