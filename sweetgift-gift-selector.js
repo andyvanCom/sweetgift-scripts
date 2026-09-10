@@ -265,7 +265,7 @@ Loads small matching pages from a catalog prepared once per day.
       {
         p_collection: mode.collection,
         p_ingredients: JSON.stringify(selected),
-        p_limit: 24
+        p_limit: 12
       },
       function (data) {
         finish(null, data || { ingredients: [], products: [] });
