@@ -5,7 +5,7 @@
       "name": "core",
       "enabled": true,
       "src": "sweetgift-core.js",
-      "version": "11",
+      "version": "8",
       "pages": ["all"]
     },
     {
@@ -110,7 +110,7 @@
       "name": "gift-selector",
       "enabled": true,
       "src": "sweetgift-gift-selector.js",
-      "version": "7",
+      "version": "8",
       "pages": [
         "/podbor-po-sostavu",
         "/podbor-po-sostavu/",
