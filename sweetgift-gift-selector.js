@@ -14,8 +14,6 @@ Loads small matching pages from a catalog prepared once per day.
   var SEARCH_THRESHOLD = 30;
   var REQUEST_URL =
     'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-request';
-  var CATALOG_URL =
-    'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-catalog?v=4';
   var INGREDIENT_ALIASES = {
     'с икрой': 'икра',
     'икрой': 'икра',
@@ -262,41 +260,16 @@ Loads small matching pages from a catalog prepared once per day.
       return;
     }
 
-    var controller = typeof window.AbortController === 'function'
-      ? new window.AbortController()
-      : null;
-    var timeoutId = window.setTimeout(function () {
-      if (controller) controller.abort();
-    }, 12000);
-
-    var catalogUrl = CATALOG_URL + '&collection=' + encodeURIComponent(mode.collection);
-    selected.forEach(function (ingredient) {
-      catalogUrl += '&ingredient=' + encodeURIComponent(ingredient);
-    });
-
-    fetch(catalogUrl, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-      signal: controller ? controller.signal : undefined
-    }).then(function (response) {
-      if (!response.ok) throw new Error('Prepared catalog HTTP ' + response.status);
-      return response.json();
-    }).then(function (data) {
-      window.clearTimeout(timeoutId);
-      finish(null, data || { ingredients: [], products: [] });
-    }).catch(function () {
-      window.clearTimeout(timeoutId);
-      window.SG.core.rpcRead(
-        'get_gift_selector_cached_selection',
-        { p_collection: mode.collection, p_ingredients: selected, p_limit: 24 },
-        function (data) {
-          finish(null, data || { ingredients: [], products: [] });
-        },
-        function (error) {
-          finish(error || new Error('Не удалось загрузить каталог'));
-        }
-      );
-    });
+    window.SG.core.rpcRead(
+      'get_gift_selector_cached_selection',
+      { p_collection: mode.collection, p_ingredients: selected, p_limit: 24 },
+      function (data) {
+        finish(null, data || { ingredients: [], products: [] });
+      },
+      function (error) {
+        finish(error || new Error('Не удалось загрузить каталог'));
+      }
+    );
   }
 
   function init(root) {
