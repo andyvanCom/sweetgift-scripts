@@ -15,6 +15,8 @@ filters and sorts products locally without additional network requests.
   var SEARCH_THRESHOLD = 30;
   var REQUEST_URL =
     'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-request';
+  var CATALOG_URL =
+    'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-catalog?v=1';
   var INGREDIENT_ALIASES = {
     'с икрой': 'икра',
     'икрой': 'икра',
@@ -32,6 +34,7 @@ filters and sorts products locally without additional network requests.
   var MODES = {
     baskets: {
       rpc: 'get_gift_selector_catalog',
+      collection: 'baskets',
       title: 'Подбор подарочных корзин по составу',
       intro: 'Выберите один или несколько ингредиентов — покажем корзины, в которых есть всё выбранное.',
       loading: 'Загружаем состав подарочных корзин…',
@@ -46,6 +49,7 @@ filters and sorts products locally without additional network requests.
     },
     boxes: {
       rpc: 'get_gift_box_selector_catalog',
+      collection: 'boxes',
       title: 'Подбор подарочных наборов по составу',
       intro: 'Выберите один или несколько ингредиентов — покажем подарочные наборы в коробках и ящиках, в которых есть всё выбранное.',
       loading: 'Загружаем состав подарочных наборов…',
@@ -242,21 +246,41 @@ filters and sorts products locally without additional network requests.
       });
     }
 
-    if (!window.SG.core || typeof window.SG.core.rpc !== 'function') {
+    if (!window.SG.core || typeof window.SG.core.rpcRead !== 'function') {
       finish(new Error('SweetGift Core не загружен'));
       return;
     }
 
-    window.SG.core.rpc(
-      mode.rpc,
-      {},
-      function (data) {
-        finish(null, data || { ingredients: [], products: [] });
-      },
-      function (error) {
-        finish(error || new Error('Не удалось загрузить каталог'));
-      }
-    );
+    var controller = typeof window.AbortController === 'function'
+      ? new window.AbortController()
+      : null;
+    var timeoutId = window.setTimeout(function () {
+      if (controller) controller.abort();
+    }, 12000);
+
+    fetch(CATALOG_URL + '&collection=' + encodeURIComponent(mode.collection), {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' },
+      signal: controller ? controller.signal : undefined
+    }).then(function (response) {
+      if (!response.ok) throw new Error('Prepared catalog HTTP ' + response.status);
+      return response.json();
+    }).then(function (data) {
+      window.clearTimeout(timeoutId);
+      finish(null, data || { ingredients: [], products: [] });
+    }).catch(function () {
+      window.clearTimeout(timeoutId);
+      window.SG.core.rpcRead(
+        mode.rpc,
+        {},
+        function (data) {
+          finish(null, data || { ingredients: [], products: [] });
+        },
+        function (error) {
+          finish(error || new Error('Не удалось загрузить каталог'));
+        }
+      );
+    });
   }
 
   function init(root) {

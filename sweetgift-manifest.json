@@ -110,7 +110,7 @@
       "name": "gift-selector",
       "enabled": true,
       "src": "sweetgift-gift-selector.js",
-      "version": "6",
+      "version": "7",
       "pages": [
         "/podbor-po-sostavu",
         "/podbor-po-sostavu/",
