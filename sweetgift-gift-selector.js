@@ -15,7 +15,7 @@ Loads small matching pages from a catalog prepared once per day.
   var REQUEST_URL =
     'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-request';
   var CATALOG_URL =
-    'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-catalog?v=3';
+    'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-catalog?v=4';
   var INGREDIENT_ALIASES = {
     'с икрой': 'икра',
     'икрой': 'икра',
@@ -203,6 +203,17 @@ Loads small matching pages from a catalog prepared once per day.
     });
   }
 
+  function readRawUrlIngredients() {
+    var raw = new URLSearchParams(window.location.search).get('i') || '';
+
+    return raw.split(',').map(function (item) {
+      var normalized = normalize(item);
+      return INGREDIENT_ALIASES[normalized] || normalized;
+    }).filter(Boolean).filter(function (item, index, items) {
+      return items.indexOf(item) === index;
+    });
+  }
+
   function writeUrlIngredients(selected) {
     if (!window.history || typeof window.history.replaceState !== 'function') return;
 
@@ -306,7 +317,9 @@ Loads small matching pages from a catalog prepared once per day.
         '<div class="sg-selector-status">' + mode.loading + '</div>' +
       '</div>';
 
-    loadData(mode, [], function (error, payload) {
+    var initialSelection = readRawUrlIngredients();
+
+    loadData(mode, initialSelection, function (error, payload) {
       var shell = root.querySelector('.sg-selector');
 
       if (error) {
@@ -618,11 +631,7 @@ Loads small matching pages from a catalog prepared once per day.
       });
 
       ensureShareButton();
-      if (selected.length) {
-        refreshProducts();
-      } else {
-        render();
-      }
+      render();
     });
   }
 
