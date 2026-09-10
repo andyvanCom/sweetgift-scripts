@@ -262,7 +262,11 @@ Loads small matching pages from a catalog prepared once per day.
 
     window.SG.core.rpcRead(
       'get_gift_selector_cached_selection',
-      { p_collection: mode.collection, p_ingredients: selected, p_limit: 24 },
+      {
+        p_collection: mode.collection,
+        p_ingredients: JSON.stringify(selected),
+        p_limit: 24
+      },
       function (data) {
         finish(null, data || { ingredients: [], products: [] });
       },
