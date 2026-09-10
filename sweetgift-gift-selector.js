@@ -3,8 +3,7 @@
 SweetGift.ru | Gift Selector by Ingredients
 ---------------------------------------------------------------------------
 Client-side selector for basket and boxed gift-set pages.
-Loads the relevant catalog once through an existing RPC, then
-filters and sorts products locally without additional network requests.
+Loads small matching pages from a catalog prepared once per day.
 ===========================================================================
 */
 
@@ -16,7 +15,7 @@ filters and sorts products locally without additional network requests.
   var REQUEST_URL =
     'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-request';
   var CATALOG_URL =
-    'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-catalog?v=1';
+    'https://rvgvbxipccbkytmhltmi.functions.supabase.co/gift-selector-catalog?v=3';
   var INGREDIENT_ALIASES = {
     'с икрой': 'икра',
     'икрой': 'икра',
@@ -218,13 +217,14 @@ filters and sorts products locally without additional network requests.
     window.history.replaceState(null, '', url.pathname + url.search + url.hash);
   }
 
-  function loadData(mode, callback) {
-    var dataset = shared.datasets[mode.rpc] || {
+  function loadData(mode, selected, callback) {
+    var cacheKey = mode.collection + '|' + selected.slice().sort().join('|');
+    var dataset = shared.datasets[cacheKey] || {
       data: null,
       loading: false,
       callbacks: []
     };
-    shared.datasets[mode.rpc] = dataset;
+    shared.datasets[cacheKey] = dataset;
 
     if (dataset.data) {
       callback(null, dataset.data);
@@ -258,7 +258,12 @@ filters and sorts products locally without additional network requests.
       if (controller) controller.abort();
     }, 12000);
 
-    fetch(CATALOG_URL + '&collection=' + encodeURIComponent(mode.collection), {
+    var catalogUrl = CATALOG_URL + '&collection=' + encodeURIComponent(mode.collection);
+    selected.forEach(function (ingredient) {
+      catalogUrl += '&ingredient=' + encodeURIComponent(ingredient);
+    });
+
+    fetch(catalogUrl, {
       method: 'GET',
       headers: { 'Accept': 'application/json' },
       signal: controller ? controller.signal : undefined
@@ -271,8 +276,8 @@ filters and sorts products locally without additional network requests.
     }).catch(function () {
       window.clearTimeout(timeoutId);
       window.SG.core.rpcRead(
-        mode.rpc,
-        {},
+        'get_gift_selector_cached_selection',
+        { p_collection: mode.collection, p_ingredients: selected, p_limit: 24 },
         function (data) {
           finish(null, data || { ingredients: [], products: [] });
         },
@@ -301,7 +306,7 @@ filters and sorts products locally without additional network requests.
         '<div class="sg-selector-status">' + mode.loading + '</div>' +
       '</div>';
 
-    loadData(mode, function (error, payload) {
+    loadData(mode, [], function (error, payload) {
       var shell = root.querySelector('.sg-selector');
 
       if (error) {
@@ -313,6 +318,8 @@ filters and sorts products locally without additional network requests.
 
       var ingredients = Array.isArray(payload.ingredients) ? payload.ingredients : [];
       var products = Array.isArray(payload.products) ? payload.products : [];
+      var total = Number(payload.total);
+      if (!isFinite(total)) total = products.length;
       var selected = readUrlIngredients(ingredients);
       var search = '';
 
@@ -440,11 +447,12 @@ filters and sorts products locally without additional network requests.
 
       function renderProducts() {
         var results = filteredProducts();
-        count.textContent = 'Найдено: ' + results.length + ' ' +
-          (results.length % 10 === 1 && results.length % 100 !== 11
+        var resultCount = total;
+        count.textContent = 'Найдено: ' + resultCount + ' ' +
+          (resultCount % 10 === 1 && resultCount % 100 !== 11
             ? mode.nouns[0]
-            : (results.length % 10 >= 2 && results.length % 10 <= 4 &&
-              (results.length % 100 < 10 || results.length % 100 >= 20)
+            : (resultCount % 10 >= 2 && resultCount % 10 <= 4 &&
+              (resultCount % 100 < 10 || resultCount % 100 >= 20)
               ? mode.nouns[1]
               : mode.nouns[2]));
         reset.hidden = selected.length === 0;
@@ -502,6 +510,20 @@ filters and sorts products locally without additional network requests.
         updateShare();
       }
 
+      function refreshProducts() {
+        grid.innerHTML = '<div class="sg-selector-status">Подбираем подходящие варианты…</div>';
+        loadData(mode, selected, function (error, nextPayload) {
+          if (error) {
+            grid.innerHTML = '<div class="sg-selector-status">Не удалось обновить подборку. Попробуйте ещё раз.</div>';
+            return;
+          }
+          products = Array.isArray(nextPayload.products) ? nextPayload.products : [];
+          total = Number(nextPayload.total);
+          if (!isFinite(total)) total = products.length;
+          render();
+        });
+      }
+
       chipsRoot.addEventListener('click', function (event) {
         var chip = event.target.closest('[data-ingredient]');
         if (!chip) return;
@@ -515,14 +537,20 @@ filters and sorts products locally without additional network requests.
           selected.splice(index, 1);
         }
 
-        render();
+        renderChips();
+        writeUrlIngredients(selected);
+        updateShare();
+        refreshProducts();
       });
 
       reset.addEventListener('click', function () {
         selected = [];
         search = '';
         if (searchInput) searchInput.value = '';
-        render();
+        renderChips();
+        writeUrlIngredients(selected);
+        updateShare();
+        refreshProducts();
       });
 
       if (searchInput) {
@@ -590,7 +618,11 @@ filters and sorts products locally without additional network requests.
       });
 
       ensureShareButton();
-      render();
+      if (selected.length) {
+        refreshProducts();
+      } else {
+        render();
+      }
     });
   }
 

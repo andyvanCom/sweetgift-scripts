@@ -5,15 +5,26 @@ const corsHeaders = {
 };
 
 function jsonResponse(body: unknown, status = 200, cache = false): Response {
-  return new Response(JSON.stringify(body), {
+  const json = JSON.stringify(body);
+  const headers: Record<string, string> = {
+    ...corsHeaders,
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": cache
+      ? "public, max-age=300, s-maxage=86400, stale-while-revalidate=3600"
+      : "no-store",
+  };
+  let responseBody: BodyInit = json;
+
+  if (cache) {
+    headers["Content-Encoding"] = "gzip";
+    responseBody = new Blob([json]).stream().pipeThrough(
+      new CompressionStream("gzip"),
+    );
+  }
+
+  return new Response(responseBody, {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": cache
-        ? "public, max-age=300, s-maxage=86400, stale-while-revalidate=3600"
-        : "no-store",
-    },
+    headers,
   });
 }
 
@@ -26,7 +37,9 @@ Deno.serve(async (req: Request) => {
     return jsonResponse({ error: "Method not allowed" }, 405);
   }
 
-  const collection = new URL(req.url).searchParams.get("collection") || "";
+  const params = new URL(req.url).searchParams;
+  const collection = params.get("collection") || "";
+  const ingredients = params.getAll("ingredient").slice(0, 12);
   if (collection !== "baskets" && collection !== "boxes") {
     return jsonResponse({ error: "Invalid collection" }, 400);
   }
@@ -42,7 +55,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/rpc/get_gift_selector_cached_catalog`,
+      `${supabaseUrl}/rest/v1/rpc/get_gift_selector_cached_selection`,
       {
         method: "POST",
         headers: {
@@ -50,7 +63,11 @@ Deno.serve(async (req: Request) => {
           Authorization: `Bearer ${publishableKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ p_collection: collection }),
+        body: JSON.stringify({
+          p_collection: collection,
+          p_ingredients: ingredients,
+          p_limit: 24,
+        }),
         signal: controller.signal,
       },
     );
@@ -68,4 +85,3 @@ Deno.serve(async (req: Request) => {
     clearTimeout(timeout);
   }
 });
-
