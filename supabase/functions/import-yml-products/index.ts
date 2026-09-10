@@ -199,6 +199,46 @@ function isNonFoodCompositionLine(value: string): boolean {
   return /^(?:бенгальские\s+огни|варежки|елочная\s+игрушка|игрушка\s+гном|веточки\s+(?:розмарина|эвкалипта)|в\s+роскошном\s+составе|\d[\d,\.\s]*%(?:\s*[,.;])?(?:\s*алкогольная\s+продукция|\s*белый\s+полусладкий)|уважаемые\s+покупатели|идеально\s+подойдет\s+в\s+качестве\s+подарка|королевский\s+букет\s+из\s+свежих\s+ягод|ароматическ[а-яё]*.*диффузор|диффузор(?:[\s,.:]|$)|в\s+сос?а?в\s+корзины\s+входит|изысканн[а-яё]*\s+фруктов[а-яё]*\s+корзин|упаковка(?:[\s,.:]|$)|укорзина(?:[\s,.:]|$)|корзин(?:а|ы)?(?:[\s,.:]|$)|наполнител|декор(?:[\s,.:]|$)|новогодн[а-яё]*\s+декор|деревянн[а-яё]*\s+(?:ящик|короб)|ящик(?:\s|$)|бант(?:[\s,.:]|$)|бесплатн[а-яё]*\s+брендирован|условия\s+хранения|специальн(?:ое|ые)\s+предложен)/i.test(value);
 }
 
+function canonicalIngredientVariants(value: string): string[] {
+  const explicitAlternatives: Record<string, string[]> = {
+    "ананас - бананы": ["ананас", "банан"],
+    "ананас медовый или мини ананасы": ["ананас медовый", "мини-ананас"],
+    "ананас мини или ананас голд": ["мини-ананас", "ананас голд"],
+    "апельсины красные или шоколадные": ["апельсин красный", "апельсин шоколадный"],
+    "мини – бананы или бананы": ["мини-банан", "банан"],
+    "мини бананы или бананы": ["мини-банан", "банан"],
+    "мини ананасы или ананас голд": ["мини-ананас", "ананас голд"],
+    "мини-ананасы или ананас медовый": ["мини-ананас", "ананас медовый"],
+    "мини-ананасы или ананас gold": ["мини-ананас", "ананас голд"],
+    "слива - питахайя": ["слива", "питахайя"],
+    "мята или зелень питоспориум": ["мята", "зелень питоспориум"],
+    "леденцы - чай hilltop": ["леденцы", "чай hilltop"],
+    "мед 230 г - сыр dorblu": ["мед 230 г", "сыр dorblu"],
+    "оливки delphi - кофе в зернах honduras san marcos": ["оливки delphi", "кофе в зернах honduras san marcos"],
+    "печенье - конфеты ферреро роше": ["печенье", "конфеты ферреро роше"],
+    "печенье сахарное лаванда - голубика 170 г": ["печенье сахарное лаванда", "голубика 170 г"],
+    "сыр качотта 125 г - сыр камамбер 125 г": ["сыр качотта 125 г", "сыр камамбер 125 г"],
+  };
+  if (explicitAlternatives[value]) return explicitAlternatives[value];
+
+  return [value
+    .replace(/^абрикосы$/, "абрикос")
+    .replace(/^апельсины(?=\s|$)/, "апельсин")
+    .replace(/^бананы$/, "банан")
+    .replace(/^груши(?=\s|$)/, "груша")
+    .replace(/^лимоны$/, "лимон")
+    .replace(/^мандарины(?=\s|$)/, "мандарин")
+    .replace(/^нектарины$/, "нектарин")
+    .replace(/^персики$/, "персик")
+    .replace(/^сливы$/, "слива")
+    .replace(/^яблоки(?=\s|$)/, "яблоко")
+    .replace(/^груша сочные$/, "груша сочная")
+    .replace(/^мандарин отборные(?=\s|$)/, "мандарин отборный")
+    .replace(/^яблоко гренни$/, "яблоко гренни")
+    .replace(/^яблоко зеленые(?=\s|$)/, "яблоко зеленое")
+    .replace(/^яблоко красные(?=\s|$)/, "яблоко красное")];
+}
+
 function extractWeight(value: string): string | null {
   const match = value.match(/(\d+[\.,]?\d*)\s*(г|гр|грамм|кг|мл|л|шт)/i);
   return match ? match[0] : null;
@@ -407,32 +447,27 @@ serve(async () => {
       const ingredientRows = ingredients.flatMap((ingredient) => {
         const normalized = normalizeIngredient(ingredient);
         if (!normalized || isNonFoodCompositionLine(normalized)) return [];
+        return canonicalIngredientVariants(normalized).flatMap((canonical) => {
+          const matchedTags = Array.from(new Set(rules
+            .filter((rule) => ingredientMatchesRule(canonical, rule))
+            .map((rule) => rule.tag)));
 
-        const matchedTags = Array.from(
-          new Set(
-            rules
-              .filter((rule) => ingredientMatchesRule(normalized, rule))
-              .map((rule) => rule.tag),
-          ),
-        );
-
-        if (!matchedTags.length) {
-          return [{
+          if (!matchedTags.length) return [{
             product_key: productKey,
             ingredient_raw: ingredient,
-            ingredient_normalized: normalized,
+            ingredient_normalized: canonical,
             tag: null,
-            weight_text: extractWeight(ingredient),
+            weight_text: extractWeight(canonical),
           }];
-        }
 
-        return matchedTags.map((tag) => ({
-          product_key: productKey,
-          ingredient_raw: ingredient,
-          ingredient_normalized: normalized,
-          tag,
-          weight_text: extractWeight(ingredient),
-        }));
+          return matchedTags.map((tag) => ({
+            product_key: productKey,
+            ingredient_raw: ingredient,
+            ingredient_normalized: canonical,
+            tag,
+            weight_text: extractWeight(canonical),
+          }));
+        });
       }).filter((row, index, rows) => rows.findIndex((candidate) =>
         candidate.ingredient_normalized === row.ingredient_normalized &&
         candidate.tag === row.tag
