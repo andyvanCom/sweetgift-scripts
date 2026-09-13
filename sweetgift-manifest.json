@@ -1,5 +1,5 @@
 {
-  "version": "1.0.28",
+  "version": "1.0.29",
   "modules": [
     {
       "name": "core",
@@ -26,7 +26,7 @@
       "name": "order-tracker",
       "enabled": true,
       "src": "sweetgift-order-tracker.js",
-      "version": "4",
+      "version": "5",
       "pages": ["all"]
     },
     {
