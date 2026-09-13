@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { authorizeRunRequest } from "../_shared/run-auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -201,17 +202,13 @@ function catalogChangeLines(job: JobHealth | undefined): string[] {
 }
 
 Deno.serve(async (req) => {
-  const runSecret = Deno.env.get("REPORT_RUN_SECRET");
-  const requestSecret = req.headers.get("x-report-secret");
+  const authorized = await authorizeRunRequest(req, {
+    newSecret: Deno.env.get("DAILY_REPORT_RUN_SECRET"),
+    legacySecret: Deno.env.get("REPORT_RUN_SECRET"),
+    legacyHeaders: ["x-report-secret"],
+  });
 
-  if (!runSecret) {
-    return Response.json(
-      { ok: false, error: "REPORT_RUN_SECRET is not configured" },
-      { status: 503 },
-    );
-  }
-
-  if (requestSecret !== runSecret) {
+  if (!authorized) {
     return Response.json(
       { ok: false, error: "Unauthorized" },
       { status: 401 },

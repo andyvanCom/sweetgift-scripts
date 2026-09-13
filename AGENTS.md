@@ -12,6 +12,7 @@
 - Supabase schema, RPC and cron changes must be represented by ordered files in `supabase/migrations/`; compare them with the remote migration history before applying anything.
 - Article recommendations are precomputed by the backend and exported to `article-products-cache/`; frontend uses jsDelivr first and Edge/RPC only as fallback. The scheduled GitHub workflow may commit cache changes directly to `main`.
 - This is a public repository. Never commit service-role/JWT values, SMTP credentials, tokens, cron secrets, customer data or production exports containing personal data. Runtime secrets belong in Supabase Secrets or protected environments.
+- Never place credentials in SQL migrations, `pg_cron` command literals, source code, logs, fixtures, examples, prompts or reports. Scheduler-side credentials belong in Supabase Vault; Edge Function consumers read matching values from Edge Function Secrets.
 
 ## Verification and release
 

@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authorizeRunRequest } from "../_shared/run-auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -215,10 +216,13 @@ function classifyArticle(article: Article): Entity[] {
 }
 
 Deno.serve(async (req) => {
-  const runSecret = Deno.env.get("REPORT_RUN_SECRET");
-  const requestSecret = req.headers.get("x-report-secret");
+  const authorized = await authorizeRunRequest(req, {
+    newSecret: Deno.env.get("CLASSIFY_ARTICLES_RUN_SECRET"),
+    legacySecret: Deno.env.get("REPORT_RUN_SECRET"),
+    legacyHeaders: ["x-report-secret"],
+  });
 
-  if (runSecret && requestSecret !== runSecret) {
+  if (!authorized) {
     return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 

@@ -1,5 +1,9 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import {
+  authorizeRunRequest,
+  forwardRunAuthHeaders,
+} from "../_shared/run-auth.ts";
 
 const FEED_URL = "https://sweetgift.ru/sitemap-feeds.xml";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -754,10 +758,13 @@ async function runImport(
 }
 
 Deno.serve(async (req) => {
-    const runSecret = Deno.env.get("REPORT_RUN_SECRET");
-    const requestSecret = req.headers.get("x-report-secret");
+    const authorized = await authorizeRunRequest(req, {
+      newSecret: Deno.env.get("ARTICLE_IMPORT_RUN_SECRET"),
+      legacySecret: Deno.env.get("REPORT_RUN_SECRET"),
+      legacyHeaders: ["x-report-secret"],
+    });
 
-    if (runSecret && requestSecret !== runSecret) {
+    if (!authorized) {
       return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -842,12 +849,7 @@ Deno.serve(async (req) => {
         nextUrl.searchParams.set("chain_depth", String(chainDepth + 1));
 
         const nextBatch = fetch(nextUrl, {
-          headers: requestSecret
-            ? {
-              "x-report-secret": requestSecret,
-              "Content-Type": "application/json",
-            }
-            : { "Content-Type": "application/json" },
+          headers: forwardRunAuthHeaders(req),
         }).then(async (response) => {
           const body = await response.text();
 

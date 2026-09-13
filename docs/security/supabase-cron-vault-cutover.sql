@@ -1,0 +1,47 @@
+-- DRAFT ONLY — NOT SAFE TO APPLY UNTIL MIGRATION LEDGER RECONCILIATION.
+--
+-- Purpose: document the future pg_cron cutover from credential literals to
+-- Supabase Vault lookups. This file intentionally lives under docs/, not
+-- supabase/migrations/, and must not be applied as-is.
+--
+-- Preconditions:
+--   * dual-token Edge Function versions are deployed and verified;
+--   * every named Vault secret exists and matches its Edge Function Secret;
+--   * the current production job IDs, URLs, methods, bodies and schedules have
+--     been re-read and compared with this proposal;
+--   * a sanitized rollback command is held in protected operational storage.
+--
+-- The executable forward migration must:
+--   1. locate each job by stable job name and fail if missing/duplicated;
+--   2. preserve job ID, schedule, active state, URL, HTTP method and body;
+--   3. replace only header construction;
+--   4. obtain the value at execution time with a scalar lookup such as:
+--
+--      (select decrypted_secret
+--         from vault.decrypted_secrets
+--        where name = '<VAULT_NAME>')
+--
+--   5. send it only as x-sweetgift-run-secret;
+--   6. fail closed if the named secret is missing or duplicated;
+--   7. never interpolate the decrypted value into stored cron.job.command text.
+--
+-- Job mapping:
+--
+-- import-yml-products-daily
+--   Vault: sweetgift_product_import_run_secret
+--   Header: x-sweetgift-run-secret
+--
+-- import-articles-index-daily
+--   Vault: sweetgift_article_import_run_secret
+--   Header: x-sweetgift-run-secret
+--
+-- classify-articles-daily
+--   Vault: sweetgift_classify_articles_run_secret
+--   Header: x-sweetgift-run-secret
+--
+-- send-daily-report
+--   Vault: sweetgift_daily_report_run_secret
+--   Header: x-sweetgift-run-secret
+--
+-- Do not copy commands from production into Git until all credential values are
+-- replaced with symbolic placeholders and a secret scan passes.

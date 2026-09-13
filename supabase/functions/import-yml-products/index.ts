@@ -1,11 +1,10 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { XMLParser } from "https://esm.sh/fast-xml-parser@4.5.0";
+import { authorizeRunRequest } from "../_shared/run-auth.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 const PRODUCT_BATCH_SIZE = 100;
 const INGREDIENT_BATCH_SIZE = 500;
@@ -18,7 +17,11 @@ function chunks<T>(items: T[], size: number): T[][] {
   return result;
 }
 
-async function selectAll(table: string, columns: string) {
+async function selectAll(
+  supabase: ReturnType<typeof createClient>,
+  table: string,
+  columns: string,
+) {
   const rows: CatalogRow[] = [];
   for (let from = 0;; from += 1000) {
     const { data, error } = await supabase.from(table).select(columns).range(from, from + 999);
@@ -150,7 +153,21 @@ function changeSample(rows: CatalogRow[], key: string) {
   }));
 }
 
-serve(async () => {
+serve(async (request) => {
+  const authorized = await authorizeRunRequest(request, {
+    newSecret: Deno.env.get("PRODUCT_IMPORT_RUN_SECRET"),
+    legacySecret: Deno.env.get("PRODUCT_IMPORT_LEGACY_RUN_SECRET"),
+    legacyHeaders: ["authorization", "apikey"],
+  });
+
+  if (!authorized) {
+    return new Response(JSON.stringify({ ok: false, error: "Unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
   const startedAt = new Date().toISOString();
   const startedMs = Date.now();
   let jobLogId: number | string | null = null;
@@ -354,8 +371,8 @@ serve(async () => {
     // Read the previous snapshot before writing so the job log contains a
     // useful YML delta instead of comparing the source to its own upsert.
     const [previousProducts, previousVariants] = await Promise.all([
-      selectAll("products_catalog", "product_key,title,url,price,old_price,available"),
-      selectAll("product_variants", "variant_key,title,url,price,old_price,available,option_name,option_value"),
+      selectAll(supabase, "products_catalog", "product_key,title,url,price,old_price,available"),
+      selectAll(supabase, "product_variants", "variant_key,title,url,price,old_price,available,option_name,option_value"),
     ]);
 
     const previousProductMap = new Map((previousProducts || []).map((row) => [String(row.product_key), row as CatalogRow]));
@@ -411,7 +428,7 @@ serve(async () => {
       if (variantUpsertError) throw variantUpsertError;
     }
 
-    const existingVariants = await selectAll("product_variants", "variant_key,available");
+    const existingVariants = await selectAll(supabase, "product_variants", "variant_key,available");
 
     const missingVariantKeys = (existingVariants || [])
       .filter((row) => row.available !== false && !sourceVariantKeys.has(String(row.variant_key)))
@@ -444,7 +461,7 @@ serve(async () => {
       ingredientsInserted += batch.length;
     }
 
-    const existingProducts = await selectAll("products_catalog", "product_key,available");
+    const existingProducts = await selectAll(supabase, "products_catalog", "product_key,available");
 
     const missingKeys = (existingProducts || [])
       .filter((row) => row.available !== false && !sourceProductKeys.has(String(row.product_key)))
