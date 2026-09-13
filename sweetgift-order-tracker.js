@@ -12,6 +12,9 @@ SweetGift.ru | Anonymous Order Tracker
 
   var RPC_NAME = 'track_product_order';
   var STORAGE_PREFIX = 'sg_order_tracked_';
+  var METRIKA_COUNTER_ID = 18246130;
+  var PAYMENT_EVENT_NAME = 'checkout_payment_selected';
+  var PAYMENT_STORAGE_PREFIX = 'sg_metrika_payment_';
   var pending = {};
   var snapshots = typeof WeakMap === 'function' ? new WeakMap() : null;
 
@@ -19,7 +22,7 @@ SweetGift.ru | Anonymous Order Tracker
   window.SG.orderTracker = window.SG.orderTracker || {};
 
   var tracker = window.SG.orderTracker;
-  tracker.version = '1.0.1';
+  tracker.version = '1.1.0';
 
   function core() {
     return window.SG && window.SG.core ? window.SG.core : null;
@@ -331,6 +334,55 @@ SweetGift.ru | Anonymous Order Tracker
     } catch (e) {}
   }
 
+  function paymentEventWasSent(id) {
+    try {
+      return window.localStorage.getItem(PAYMENT_STORAGE_PREFIX + id) === '1';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markPaymentEventSent(id) {
+    try {
+      window.localStorage.setItem(PAYMENT_STORAGE_PREFIX + id, '1');
+    } catch (e) {}
+  }
+
+  function metrika() {
+    if (typeof window.ym === 'function') return window.ym;
+
+    window.ym = function () {
+      window.ym.a = window.ym.a || [];
+      window.ym.a.push(arguments);
+    };
+    window.ym.a = window.ym.a || [];
+    return window.ym;
+  }
+
+  function sendPaymentSelected(payload) {
+    var id = payload && payload.order_id;
+    var paymentSystem = cleanText(payload && payload.payment_system, 100);
+
+    if (!id || !paymentSystem || paymentEventWasSent(id)) return;
+
+    markPaymentEventSent(id);
+
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({
+      event: PAYMENT_EVENT_NAME,
+      PAYMENTSYSTEM: paymentSystem
+    });
+
+    metrika()(
+      METRIKA_COUNTER_ID,
+      'reachGoal',
+      PAYMENT_EVENT_NAME,
+      { PAYMENTSYSTEM: paymentSystem }
+    );
+
+    log('payment selected tracked', id, paymentSystem);
+  }
+
   function send(payload, attempt) {
     var id = payload && payload.order_id;
     if (!id || !payload.items.length || wasSent(id) || pending[id]) return;
@@ -402,6 +454,7 @@ SweetGift.ru | Anonymous Order Tracker
       cartSnapshot = copyCart();
     }
     var payload = buildPayload(form, cartSnapshot, savedFields);
+    sendPaymentSelected(payload);
     send(payload, 0);
 
     if (snapshots) {
