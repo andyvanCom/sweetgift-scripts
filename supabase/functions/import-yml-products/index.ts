@@ -70,9 +70,15 @@ function extractComposition(description: string | null): string | null {
 
   const clean = description
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
+    .replace(/<\/(?:p|div|li|tr|td|ul|ol|h[1-6])>/gi, "\n")
+    .replace(/<(?:p|div|li|tr|td|ul|ol|h[1-6])\b[^>]*>/gi, "\n")
     .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/g, " ")
+    // Decode ampersands before splitting ingredients: otherwise the `;` in
+    // `&amp;` creates fragments such as `Cartwright &amp` and `Butler`.
+    .replace(/&amp;/gi, "&")
+    .replace(/&(?:amp;)?nbsp;?|#nbsp;?/gi, " ")
+    .replace(/\r/g, "\n")
+    .replace(/\n{2,}/g, "\n")
     .trim();
 
   const marker = "В состав";
@@ -86,10 +92,49 @@ function extractComposition(description: string | null): string | null {
 function splitIngredients(composition: string | null): string[] {
   if (!composition) return [];
 
-  return composition
+  // Everything after this heading is storage guidance, not composition.
+  const compositionOnly = composition.split(
+    /\n\s*(?:❄️\s*)?условия\s+хранения/i,
+    1,
+  )[0];
+
+  // Long prose-only descriptions are marketing copy, not a composition.
+  // Do not turn whole paragraphs into fake ingredient entities.
+  if (
+    compositionOnly.length > 400 &&
+    !/\d+(?:[.,]\d+)?\s*(?:грамм(?:а|ов)?|гр\.?|г|кг|мл|л|шт\.?|штук)(?:\s|$|[А-ЯЁ])/i.test(compositionOnly)
+  ) return [];
+
+  const separated = compositionOnly
+    .replace(/&amp;/gi, "&")
+    .replace(/&(?:amp;)?nbsp;?|#nbsp;?/gi, " ")
+    .replace(/\*?\s*внимание![\s\S]*/i, "")
+    .replace(/рекомендуемые\s+сроки\s+и\s+условия\s+хранения[\s\S]*/i, "")
+    .replace(/(^|\n)\s*состав:\s*([^\n]+)/gi, (_match, lead, list) =>
+      `${lead}${list.replace(/,\s*/g, "\n")}`
+    )
+    // A frequent Tilda export defect removes the separator after a weight:
+    // `125 граммСыр ...`. Restore that unambiguous boundary first.
+    .replace(
+      /(\d+(?:[.,]\d+)?\s*(?:грамм(?:а|ов)?|гр\.?|г|кг|мл|л|шт\.?|штук|бутылк[аи]?))(?=[А-ЯЁ])/g,
+      "$1\n",
+    )
+    // Some rows have no weight, but the following product starts with a
+    // stable catalogue noun and an uppercase letter.
+    .replace(
+      /([а-яё)\]])(?=(?:Ананас|Артишоки|Варенье|Ветчина|Джем|Икра|Колбаса|Конфеты|Кофе|Мёд|Мед|Мясо|Напиток|Оливки|Орехи|Паштет|Печенье|Риет|Рийет|Рулет|Сыр|Чай|Шоколад)\b)/g,
+      "$1\n",
+    );
+
+  const ignored = /^(?:❄️|условия\s+хранения|корзины\s+со\s+значком|рекомендуем\s+хранить|если\s+нет\s+возможности|избегайте\s+хранения|на\s+фото|внимание|возможно\s+(?:изменени|брендирован)|бесплатн[а-яё]*\s+брендирован|при\s+заказе|срок\s+изготовлен|специальн(?:ое|ые)\s+предложен|в\s+сос?тав\s+корзины\s+входит|отборные\s+продукты|корзин(?:а|ы)?(?:[\s,.:]|$)|укорзина(?:[\s,.:]|$)|плетен[а-яё]*\s+корзин|стильн[а-яё]*\s+корзин|подарочн[а-яё]*\s+корзин|ящик(?:\s|$)|деревянн[а-яё]*\s+(?:ящик|короб)|крафт\s+короб|новогодн[а-яё]*\s+крафт\s+короб|крышка\s+с\s+надписью|упаковк(?:[\s,.:]|$)|надежн[а-яё]*\s+упаковк|подарочн[а-яё]*\s+упаковк|бант(?:[\s,.:]|$)|изысканн[а-яё]*\s+бант|наполнител|бумажный\s+наполни|декор(?:[\s,.:]|$)|новогодн[а-яё]*\s+декор|флористическ|зелень(?:[\s,.:]|$)|жив[а-яё]*\s+(?:голуб[а-яё]*\s+)?ель|искус?ственн[а-яё]*\s+ель|игрушка\s+на\s+елку|новогодн[а-яё]*\s+игрушк|новогодн[а-яё]*\s+(?:кружк|свеч)|кружка(?:\s|$)|плед(?:\s|$)|аромасвеч|соевая\s+аромасвеч|спички\s+для\s+свеч|открытка(?:\s|$)|диффузор-открытка|микс\s+цветов|цветок\s+в\s+горшке)/i;
+  const measurementOnly = /^\s*\d+(?:[.,]\d+)?\s*(?:грамм(?:а|ов)?|гр\.?|г|кг|мл|л|шт\.?|штук|веточ(?:ка|ки|ек)?|см)?\s*$/i;
+
+  return separated
     .split(/\n|;|•|—/g)
     .map((x) => x
       .replace(/^[-–—\s]+/, "")
+      .replace(/^[([]+\s*/, "")
+      .replace(/^[а-яё](?=[А-ЯЁ])/, "")
       // Tilda/YML sometimes stores the whole composition on one line after
       // this heading. Remove only the heading, not the ingredients following
       // it (the former filter discarded the complete line).
@@ -98,16 +143,103 @@ function splitIngredients(composition: string | null): string[] {
     .filter((x) => x.length > 2)
     .filter((x) => !/^в состав/i.test(x))
     .filter((x) => !/^дxшxв/i.test(x))
-    .filter((x) => !/^вес/i.test(x));
+    .filter((x) => !/^вес/i.test(x))
+    .filter((x) => !ignored.test(x))
+    .filter((x) => !measurementOnly.test(x));
 }
 
 function normalizeIngredient(value: string): string {
   return value
     .toLowerCase()
     .replace(/ё/g, "е")
+    .replace(/^[^a-zа-яё0-9]+/u, "")
+    .replace(/[^a-zа-яё0-9 .,()&'×%+\/~–—-]+$/u, "")
+    .replace(/&amp;/gi, "&")
+    .replace(/^[iі]\s*(?=[а-я])/i, "")
+    .replace(/^\s*\d+\s+(?:вида|сорта)\s+/, "")
+    .replace(/^\s*\d+\s*шт\.?\s*[-–—:]?\s*/i, "")
+    .replace(/\s*\(\s*(?:по\s+сезону|сезонно)\s*\)\s*/gi, " ")
+    .replace(/^винограда\.?$/, "виноград")
+    .replace(/^голубика\s+корзина$/, "голубика")
+    .replace(/^свежая мята для особого аромата$/, "мята свежая")
+    .replace(/^1\s+6\s+кг\s+сочной\s+клубники[\s\S]*$/, "клубника 1,6 кг")
+    .replace(/^200 г спелой малины\s*-\s*сладкой и ароматной$/, "малина 200 г")
+    .replace(/^200 г отборной голубики\s*-\s*полезной и витаминной$/, "голубика 200 г")
+    .replace(/грецс?кий/g, "грецкий")
+    .replace(/гретский/g, "грецкий")
+    .replace(/\bnamlet\b/g, "hamlet")
+    .replace(/одивок(?=\s|$)/g, "оливок")
+    .replace(/бельгийские\s+шоколадные\s+конфет(?=\s|$)/g, "бельгийские шоколадные конфеты")
+    .replace(/^брускетта tasty story из оливок и вяленых томатов 200(?:\s*г)?$/, "брускетта tasty story из зеленых оливок и вяленых томатов 200 г")
+    .replace(/^брускетта tasty story из зеленых оливок и вяленых томатов 200$/, "брускетта tasty story из зеленых оливок и вяленых томатов 200 г")
+    .replace(/\b(\d+)[.,]\s+(\d+)\b/g, "$1,$2")
+    .replace(/([а-яё])(?=\d)/g, "$1 ")
+    .replace(/(\d)(?=[а-яё])/g, "$1 ")
+    .replace(/(\d+(?:[.,]\d+)?)\.?\s*(?:грамм(?:а|ов)?|гр\.?|г)(?=\s|$|[,.)])/g, "$1 г")
+    .replace(/(\d+(?:[.,]\d+)?)\s*(кг|мл|л|шт|см)(?=\s|$|[,.)])/g, "$1 $2")
+    .replace(/^брускетта tasty story из оливок и вяленых томатов 200 г$/, "брускетта tasty story из зеленых оливок и вяленых томатов 200 г")
+    .replace(/^брускетта tasty story из зеленых оливок и вяленых томатов 200$/, "брускетта tasty story из зеленых оливок и вяленых томатов 200 г")
+    .replace(/(\d+)\s*\*\s*(\d+)/g, "$1×$2")
+    .replace(/\bмини\s*[–—-]?\s*(ананас|банан)/g, "мини-$1")
+    .replace(/\bкрем\s+мед\b/g, "крем-мед")
+    .replace(/\bпо\s+деревенски\b/g, "по-деревенски")
+    .replace(/\s*\(\s*в ассортименте\s*\)/g, " в ассортименте")
     .replace(/[«»"]/g, "")
+    .replace(/\s*,\s*/g, ", ")
+    .replace(/[,\.]\s+(?=\d+(?:[.,]\d+)?\s*(?:г|кг|мл|л|шт|см)(?:\s|$))/g, " ")
+    .replace(/\s+([)])/g, "$1")
+    .replace(/([(])\s+/g, "$1")
     .replace(/\s+/g, " ")
+    .replace(/^брускетта tasty story из (?:зеленых )?оливок и вяленых томатов 200 г$/, "брускетта tasty story из зеленых оливок и вяленых томатов 200 г")
+    .replace(/[\s,.;:–—-]+$/, "")
     .trim();
+}
+
+function isNonFoodCompositionLine(value: string): boolean {
+  // Run this after normalization as a second guard. Decorative emoji and
+  // malformed prefixes in the source can otherwise hide service lines from
+  // the earlier raw-text filter.
+  return /^(?:бенгальские\s+огни|варежки|елочная\s+игрушка|игрушка\s+гном|веточки\s+(?:розмарина|эвкалипта)|в\s+роскошном\s+составе|\d[\d,\.\s]*%(?:\s*[,.;])?(?:\s*алкогольная\s+продукция|\s*белый\s+полусладкий)|уважаемые\s+покупатели|идеально\s+подойдет\s+в\s+качестве\s+подарка|королевский\s+букет\s+из\s+свежих\s+ягод|ароматическ[а-яё]*.*диффузор|диффузор(?:[\s,.:]|$)|в\s+сос?а?в\s+корзины\s+входит|изысканн[а-яё]*\s+фруктов[а-яё]*\s+корзин|упаковка(?:[\s,.:]|$)|укорзина(?:[\s,.:]|$)|корзин(?:а|ы)?(?:[\s,.:]|$)|наполнител|декор(?:[\s,.:]|$)|новогодн[а-яё]*\s+декор|деревянн[а-яё]*\s+(?:ящик|короб)|ящик(?:\s|$)|бант(?:[\s,.:]|$)|бесплатн[а-яё]*\s+брендирован|условия\s+хранения|специальн(?:ое|ые)\s+предложен)/i.test(value);
+}
+
+function canonicalIngredientVariants(value: string): string[] {
+  const explicitAlternatives: Record<string, string[]> = {
+    "ананас - бананы": ["ананас", "банан"],
+    "ананас медовый или мини ананасы": ["ананас медовый", "мини-ананас"],
+    "ананас мини или ананас голд": ["мини-ананас", "ананас голд"],
+    "апельсины красные или шоколадные": ["апельсин красный", "апельсин шоколадный"],
+    "мини – бананы или бананы": ["мини-банан", "банан"],
+    "мини бананы или бананы": ["мини-банан", "банан"],
+    "мини ананасы или ананас голд": ["мини-ананас", "ананас голд"],
+    "мини-ананасы или ананас медовый": ["мини-ананас", "ананас медовый"],
+    "мини-ананасы или ананас gold": ["мини-ананас", "ананас голд"],
+    "слива - питахайя": ["слива", "питахайя"],
+    "мята или зелень питоспориум": ["мята", "зелень питоспориум"],
+    "леденцы - чай hilltop": ["леденцы", "чай hilltop"],
+    "мед 230 г - сыр dorblu": ["мед 230 г", "сыр dorblu"],
+    "оливки delphi - кофе в зернах honduras san marcos": ["оливки delphi", "кофе в зернах honduras san marcos"],
+    "печенье - конфеты ферреро роше": ["печенье", "конфеты ферреро роше"],
+    "печенье сахарное лаванда - голубика 170 г": ["печенье сахарное лаванда", "голубика 170 г"],
+    "сыр качотта 125 г - сыр камамбер 125 г": ["сыр качотта 125 г", "сыр камамбер 125 г"],
+  };
+  if (explicitAlternatives[value]) return explicitAlternatives[value];
+
+  return [value
+    .replace(/^абрикосы$/, "абрикос")
+    .replace(/^апельсины(?=\s|$)/, "апельсин")
+    .replace(/^бананы$/, "банан")
+    .replace(/^груши(?=\s|$)/, "груша")
+    .replace(/^лимоны$/, "лимон")
+    .replace(/^мандарины(?=\s|$)/, "мандарин")
+    .replace(/^нектарины$/, "нектарин")
+    .replace(/^персики$/, "персик")
+    .replace(/^сливы$/, "слива")
+    .replace(/^яблоки(?=\s|$)/, "яблоко")
+    .replace(/^груша сочные$/, "груша сочная")
+    .replace(/^мандарин отборные(?=\s|$)/, "мандарин отборный")
+    .replace(/^яблоко гренни$/, "яблоко гренни")
+    .replace(/^яблоко зеленые(?=\s|$)/, "яблоко зеленое")
+    .replace(/^яблоко красные(?=\s|$)/, "яблоко красное")];
 }
 
 function extractWeight(value: string): string | null {
@@ -331,33 +463,32 @@ serve(async (request) => {
 
       const ingredientRows = ingredients.flatMap((ingredient) => {
         const normalized = normalizeIngredient(ingredient);
+        if (!normalized || isNonFoodCompositionLine(normalized)) return [];
+        return canonicalIngredientVariants(normalized).flatMap((canonical) => {
+          const matchedTags = Array.from(new Set(rules
+            .filter((rule) => ingredientMatchesRule(canonical, rule))
+            .map((rule) => rule.tag)));
 
-        const matchedTags = Array.from(
-          new Set(
-            rules
-              .filter((rule) => ingredientMatchesRule(normalized, rule))
-              .map((rule) => rule.tag),
-          ),
-        );
-
-        if (!matchedTags.length) {
-          return [{
+          if (!matchedTags.length) return [{
             product_key: productKey,
             ingredient_raw: ingredient,
-            ingredient_normalized: normalized,
+            ingredient_normalized: canonical,
             tag: null,
-            weight_text: extractWeight(ingredient),
+            weight_text: extractWeight(canonical),
           }];
-        }
 
-        return matchedTags.map((tag) => ({
-          product_key: productKey,
-          ingredient_raw: ingredient,
-          ingredient_normalized: normalized,
-          tag,
-          weight_text: extractWeight(ingredient),
-        }));
-      });
+          return matchedTags.map((tag) => ({
+            product_key: productKey,
+            ingredient_raw: ingredient,
+            ingredient_normalized: canonical,
+            tag,
+            weight_text: extractWeight(canonical),
+          }));
+        });
+      }).filter((row, index, rows) => rows.findIndex((candidate) =>
+        candidate.ingredient_normalized === row.ingredient_normalized &&
+        candidate.tag === row.tag
+      ) === index);
 
       // A YML can contain several offers with the same product URL. Preserve
       // the old sequential-import semantics: the last offer wins completely.
@@ -478,6 +609,13 @@ serve(async (request) => {
         .in("product_key", chunk);
 
       if (deactivateError) throw deactivateError;
+
+      const { error: removeObsoleteIngredientsError } = await supabase
+        .from("product_ingredients")
+        .delete()
+        .in("product_key", chunk);
+
+      if (removeObsoleteIngredientsError) throw removeObsoleteIngredientsError;
       deactivated += chunk.length;
     }
 
