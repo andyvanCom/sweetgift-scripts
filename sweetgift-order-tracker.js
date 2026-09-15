@@ -15,6 +15,7 @@ SweetGift.ru | Anonymous Order Tracker
   var METRIKA_COUNTER_ID = 18246130;
   var PAYMENT_EVENT_NAME = 'checkout_payment_selected';
   var PAYMENT_STORAGE_PREFIX = 'sg_metrika_payment_';
+  var ATTRIBUTION_STORAGE_KEY = 'sg_crm_first_touch_v1';
   var pending = {};
   var snapshots = typeof WeakMap === 'function' ? new WeakMap() : null;
 
@@ -22,7 +23,7 @@ SweetGift.ru | Anonymous Order Tracker
   window.SG.orderTracker = window.SG.orderTracker || {};
 
   var tracker = window.SG.orderTracker;
-  tracker.version = '1.1.0';
+  tracker.version = '1.2.0';
 
   function core() {
     return window.SG && window.SG.core ? window.SG.core : null;
@@ -112,6 +113,157 @@ SweetGift.ru | Anonymous Order Tracker
     });
 
     return values;
+  }
+
+  function storageJson(storage, key) {
+    try {
+      return JSON.parse(storage.getItem(key) || 'null');
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function queryAttribution() {
+    var params;
+
+    try {
+      params = new URLSearchParams(window.location.search || '');
+    } catch (e) {
+      params = { get: function () { return null; } };
+    }
+
+    return {
+      utm_source: cleanText(params.get('utm_source'), 250),
+      utm_medium: cleanText(params.get('utm_medium'), 250),
+      utm_campaign: cleanText(params.get('utm_campaign'), 250),
+      utm_content: cleanText(params.get('utm_content'), 250),
+      utm_term: cleanText(params.get('utm_term'), 250),
+      yclid: cleanText(params.get('yclid'), 250),
+      gclid: cleanText(params.get('gclid'), 250),
+      fbclid: cleanText(params.get('fbclid'), 250),
+      gbraid: cleanText(params.get('gbraid'), 250),
+      wbraid: cleanText(params.get('wbraid'), 250),
+      roistat: cleanText(params.get('roistat'), 250),
+      from: cleanText(params.get('from'), 250),
+      gclientid: cleanText(params.get('gclientid'), 250),
+      ga_utm: cleanText(params.get('ga_utm'), 250),
+      utm_referrer: cleanText(params.get('utm_referrer'), 1000),
+      openstat_source: cleanText(params.get('_openstat_source') || params.get('openstat_source'), 250),
+      openstat_ad: cleanText(params.get('_openstat_ad') || params.get('openstat_ad'), 250),
+      openstat_campaign: cleanText(params.get('_openstat_campaign') || params.get('openstat_campaign'), 250),
+      openstat_service: cleanText(params.get('_openstat_service') || params.get('openstat_service'), 250)
+    };
+  }
+
+  function hasAttribution(values) {
+    return Object.keys(values).some(function (key) { return Boolean(values[key]); });
+  }
+
+  function rememberFirstTouch() {
+    var existing;
+    var touch;
+
+    try {
+      existing = storageJson(window.localStorage, ATTRIBUTION_STORAGE_KEY);
+      if (existing && existing.landing_url) return existing;
+
+      touch = queryAttribution();
+      touch.landing_url = cleanText(window.location.href, 1000);
+      touch.referrer = cleanText(document.referrer, 1000);
+      touch.started_at = new Date().toISOString();
+      window.localStorage.setItem(ATTRIBUTION_STORAGE_KEY, JSON.stringify(touch));
+      return touch;
+    } catch (e) {
+      touch = queryAttribution();
+      touch.landing_url = cleanText(window.location.href, 1000);
+      touch.referrer = cleanText(document.referrer, 1000);
+      touch.started_at = new Date().toISOString();
+      return touch;
+    }
+  }
+
+  var firstTouch = rememberFirstTouch();
+
+  function cookieValue(name) {
+    var match = String(document.cookie || '').match(
+      new RegExp('(?:^|;\\s*)' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)')
+    );
+    try {
+      return match ? decodeURIComponent(match[1]) : null;
+    } catch (e) {
+      return match ? match[1] : null;
+    }
+  }
+
+  function googleClientId() {
+    var ga = cookieValue('_ga');
+    var match = ga && ga.match(/^GA\d+\.\d+\.(.+)$/);
+    return match ? match[1] : null;
+  }
+
+  function upsertHidden(form, name, value) {
+    var field;
+    if (!form || !form.appendChild || !document.createElement || value == null || value === '') return;
+
+    field = form.querySelector('[name="' + name + '"]');
+    if (!field) {
+      field = document.createElement('input');
+      field.type = 'hidden';
+      field.name = name;
+      field.setAttribute('data-sg-crm-field', '1');
+      form.appendChild(field);
+    }
+    field.value = String(value);
+  }
+
+  function cartSummary(cart) {
+    return cartProducts(cart).slice(0, 100).map(function (item) {
+      var title = cleanText(firstValue(item, ['name', 'title', 'productName']), 200) || 'Товар';
+      var quantity = integer(firstValue(item, ['quantity', 'qty', 'count']), 1);
+      var price = number(firstValue(item, ['price', 'unitPrice', 'unit_price']));
+      return title + ' × ' + quantity + (price == null ? '' : ' — ' + price);
+    }).join('; ').slice(0, 4000);
+  }
+
+  function enrichCrmForm(form, cart) {
+    var current = queryAttribution();
+    var products = cartProducts(cart);
+    var fields = {
+      sg_page_url: cleanText(window.location.href, 1000),
+      sg_page_path: safePath(window.location.href),
+      sg_page_title: cleanText(document.title, 500),
+      sg_referrer: cleanText(document.referrer, 1000),
+      sg_landing_url: firstTouch && firstTouch.landing_url,
+      sg_landing_referrer: firstTouch && firstTouch.referrer,
+      sg_visit_started_at: firstTouch && firstTouch.started_at,
+      sg_ym_counter: String(METRIKA_COUNTER_ID),
+      sg_ym_uid: cleanText(cookieValue('_ym_uid'), 250),
+      sg_ga_client_id: cleanText(googleClientId(), 250),
+      sg_ga_cookie: cleanText(cookieValue('_ga'), 250),
+      sg_fbp: cleanText(cookieValue('_fbp'), 250),
+      sg_fbc: cleanText(cookieValue('_fbc'), 250),
+      sg_roistat_visit: cleanText(cookieValue('roistat_visit'), 250),
+      sg_roistat_first_visit: cleanText(cookieValue('roistat_first_visit'), 250),
+      sg_cart_total: number(firstValue(cart, ['amount', 'total', 'orderTotal'])),
+      sg_cart_subtotal: number(firstValue(cart, ['prodamount', 'subtotal', 'productsAmount'])),
+      sg_cart_discount: number(firstValue(cart, ['discount', 'discountvalue', 'discountValue'])),
+      sg_cart_product_count: products.length,
+      sg_cart_item_count: products.reduce(function (sum, item) {
+        return sum + integer(firstValue(item, ['quantity', 'qty', 'count']), 1);
+      }, 0),
+      sg_cart_items: cartSummary(cart)
+    };
+
+    Object.keys(current).forEach(function (key) {
+      fields['sg_' + key] = current[key];
+      if (firstTouch && firstTouch[key]) fields['sg_first_' + key] = firstTouch[key];
+    });
+
+    Object.keys(fields).forEach(function (name) {
+      upsertHidden(form, name, fields[name]);
+    });
+
+    log('CRM fields enriched', hasAttribution(current) ? 'attributed' : 'direct', products.length);
   }
 
   function safePath(url) {
@@ -428,8 +580,11 @@ SweetGift.ru | Anonymous Order Tracker
     var form = event.target && event.target.tagName === 'FORM' ? event.target : null;
     if (!isCartForm(form)) return;
 
+    var cartSnapshot = copyCart();
+    enrichCrmForm(form, cartSnapshot);
+
     var snapshot = {
-      cart: copyCart(),
+      cart: cartSnapshot,
       fields: copyFormFields(form)
     };
     if (snapshots) {
