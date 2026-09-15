@@ -26,7 +26,7 @@
       "name": "order-tracker",
       "enabled": true,
       "src": "sweetgift-order-tracker.js",
-      "version": "5",
+      "version": "6",
       "pages": ["all"]
     },
     {
