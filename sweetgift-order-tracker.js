@@ -15,6 +15,7 @@ SweetGift.ru | Anonymous Order Tracker
   var METRIKA_COUNTER_ID = 18246130;
   var PAYMENT_EVENT_NAME = 'checkout_payment_selected';
   var PAYMENT_STORAGE_PREFIX = 'sg_metrika_payment_';
+  var paymentPending = {};
   var ATTRIBUTION_STORAGE_KEY = 'sg_crm_first_touch_v1';
   var pending = {};
   var snapshots = typeof WeakMap === 'function' ? new WeakMap() : null;
@@ -91,6 +92,25 @@ SweetGift.ru | Anonymous Order Tracker
     }
 
     return null;
+  }
+
+  function paymentFieldValue(form, savedFields) {
+    var names = ['paymentsystem', 'PaymentSystem'];
+    var i;
+    var checked;
+    var field;
+    var plainField = null;
+
+    if (form && form.querySelector) {
+      for (i = 0; i < names.length; i += 1) {
+        checked = form.querySelector('[name="' + names[i] + '"]:checked');
+        if (checked && checked.value != null) return checked.value;
+        field = form.querySelector('[name="' + names[i] + '"]');
+        if (field && field.type !== 'radio' && field.value != null) plainField = field.value;
+      }
+    }
+
+    return fieldValue(null, names, savedFields) || plainField;
   }
 
   function copyFormFields(form) {
@@ -430,11 +450,7 @@ SweetGift.ru | Anonymous Order Tracker
       ),
       delivery_price: number(firstValue(cart, ['delivery', 'deliveryPrice', 'delivery_price'])),
       payment_system: cleanText(
-        fieldValue(
-          form,
-          ['paymentsystem', 'PaymentSystem'],
-          savedFields
-        ),
+        paymentFieldValue(form, savedFields),
         100
       ),
       promocode: cleanText(promocode, 100),
@@ -500,24 +516,14 @@ SweetGift.ru | Anonymous Order Tracker
     } catch (e) {}
   }
 
-  function metrika() {
-    if (typeof window.ym === 'function') return window.ym;
-
-    window.ym = function () {
-      window.ym.a = window.ym.a || [];
-      window.ym.a.push(arguments);
-    };
-    window.ym.a = window.ym.a || [];
-    return window.ym;
-  }
-
   function sendPaymentSelected(payload) {
     var id = payload && payload.order_id;
     var paymentSystem = cleanText(payload && payload.payment_system, 100);
 
-    if (!id || !paymentSystem || paymentEventWasSent(id)) return;
+    if (!id || !paymentSystem || paymentEventWasSent(id) || paymentPending[id]) return;
+    if (typeof window.ym !== 'function') return;
 
-    markPaymentEventSent(id);
+    paymentPending[id] = true;
 
     window.dataLayer = window.dataLayer || [];
     window.dataLayer.push({
@@ -525,14 +531,24 @@ SweetGift.ru | Anonymous Order Tracker
       PAYMENTSYSTEM: paymentSystem
     });
 
-    metrika()(
-      METRIKA_COUNTER_ID,
-      'reachGoal',
-      PAYMENT_EVENT_NAME,
-      { PAYMENTSYSTEM: paymentSystem }
-    );
+    try {
+      window.ym(
+        METRIKA_COUNTER_ID,
+        'reachGoal',
+        PAYMENT_EVENT_NAME,
+        { PAYMENTSYSTEM: paymentSystem },
+        function () {
+          markPaymentEventSent(id);
+          delete paymentPending[id];
+          log('payment method sent to Metrika', id, paymentSystem);
+        }
+      );
+    } catch (e) {
+      delete paymentPending[id];
+      log('payment method was not sent to Metrika', e);
+    }
 
-    log('payment selected tracked', id, paymentSystem);
+    log('payment method submitted', id, paymentSystem);
   }
 
   function send(payload, attempt) {
