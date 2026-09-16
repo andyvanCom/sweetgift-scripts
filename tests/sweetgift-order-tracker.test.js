@@ -37,7 +37,7 @@ function setup(paymentSystem, options = {}) {
   const paymentField = {
     name: 'paymentsystem',
     type: 'radio',
-    checked: true,
+    checked: options.checked !== false,
     disabled: false,
     value: paymentSystem
   };
@@ -48,9 +48,10 @@ function setup(paymentSystem, options = {}) {
     getAttribute(name) { return name === 'data-formcart' ? 'y' : null; },
     closest(selector) { return selector === '.t706' ? {} : null; },
     querySelector(selector) {
-      const match = selector.match(/^\[name="([^"]+)"\]$/);
-      if (match) return this.elements.find((field) => field.name === match[1]) || null;
-      return selector.indexOf('paymentsystem') !== -1 ? paymentField : null;
+      const match = selector.match(/^\[name="([^"]+)"\](?::checked)?$/);
+      if (!match) return null;
+      return this.elements.find((field) => field.name === match[1] &&
+        (!selector.endsWith(':checked') || field.checked)) || null;
     },
     appendChild(field) { this.elements.push(field); }
   };
@@ -68,7 +69,10 @@ function setup(paymentSystem, options = {}) {
       products: [{ name: 'Gift', url: '/gift', price: 1000, quantity: 1 }],
       amount: 1000
     },
-    ym() { ymCalls.push(Array.from(arguments)); },
+    ym() {
+      ymCalls.push(Array.from(arguments));
+      if (options.confirmMetrika !== false) arguments[4]();
+    },
     SG: {
       core: {
         rpc(name, payload, success) {
@@ -92,32 +96,39 @@ function setup(paymentSystem, options = {}) {
   return { form, listeners, window, rpcCalls, ymCalls };
 }
 
-test('sends the confirmed payment system once per order', () => {
-  const env = setup('custom.yandexsplit');
+for (const paymentSystem of [
+  'tinkoff', 'cash', 'custom.yandexsplit',
+  'Yandex', 'Оплата по счету'
+]) {
+  test(`sends ${paymentSystem} once after a successful cart form`, () => {
+    const env = setup(paymentSystem);
 
-  env.listeners.submit({ target: env.form });
-  env.listeners['tildaform:aftersuccess']({ target: env.form });
-  env.listeners['tildaform:aftersuccess']({ target: env.form });
+    env.listeners.submit({ target: env.form });
+    assert.equal(env.ymCalls.length, 0);
+    env.listeners['tildaform:aftersuccess']({ target: env.form });
+    env.listeners['tildaform:aftersuccess']({ target: env.form });
 
-  assert.equal(env.window.dataLayer.length, 1);
-  assert.deepEqual(
-    JSON.parse(JSON.stringify(env.window.dataLayer[0])),
-    {
-      event: 'checkout_payment_selected',
-      PAYMENTSYSTEM: 'custom.yandexsplit'
-    }
-  );
-  assert.equal(env.ymCalls.length, 1);
-  assert.deepEqual(
-    JSON.parse(JSON.stringify(env.ymCalls[0])),
-    [
-      18246130,
-      'reachGoal',
-      'checkout_payment_selected',
-      { PAYMENTSYSTEM: 'custom.yandexsplit' }
-    ]
-  );
-});
+    assert.equal(env.window.dataLayer.length, 1);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(env.window.dataLayer[0])),
+      {
+        event: 'checkout_payment_selected',
+        PAYMENTSYSTEM: paymentSystem
+      }
+    );
+    assert.equal(env.ymCalls.length, 1);
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(env.ymCalls[0].slice(0, 4))),
+      [
+        18246130,
+        'reachGoal',
+        'checkout_payment_selected',
+        { PAYMENTSYSTEM: paymentSystem }
+      ]
+    );
+    assert.equal(env.window.localStorage.getItem('sg_metrika_payment_order-42'), '1');
+  });
+}
 
 test('does not send a payment event without PAYMENTSYSTEM', () => {
   const env = setup('');
@@ -127,6 +138,37 @@ test('does not send a payment event without PAYMENTSYSTEM', () => {
 
   assert.equal(env.window.dataLayer.length, 0);
   assert.equal(env.ymCalls.length, 0);
+});
+
+test('does not mistake an unchecked radio option for a selected payment method', () => {
+  const env = setup('tinkoff', { checked: false });
+
+  env.listeners.submit({ target: env.form });
+  env.listeners['tildaform:aftersuccess']({ target: env.form });
+
+  assert.equal(env.ymCalls.length, 0);
+  assert.equal(env.window.SG.orderTracker.inspect(env.form).payment_system, null);
+});
+
+test('uses the captured choice if Tilda resets radios before aftersuccess', () => {
+  const env = setup('cash');
+
+  env.listeners.submit({ target: env.form });
+  env.form.elements[0].checked = false;
+  env.listeners['tildaform:aftersuccess']({ target: env.form });
+
+  assert.equal(env.ymCalls.length, 1);
+  assert.equal(env.ymCalls[0][3].PAYMENTSYSTEM, 'cash');
+});
+
+test('does not mark a payment event delivered without a Metrika callback', () => {
+  const env = setup('cash', { confirmMetrika: false });
+
+  env.listeners.submit({ target: env.form });
+  env.listeners['tildaform:aftersuccess']({ target: env.form });
+
+  assert.equal(env.ymCalls.length, 1);
+  assert.equal(env.window.localStorage.getItem('sg_metrika_payment_order-42'), null);
 });
 
 test('adds genuine attribution and cart context to the CRM form before submit', () => {
