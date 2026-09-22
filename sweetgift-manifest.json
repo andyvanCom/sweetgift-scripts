@@ -136,7 +136,7 @@
       "name": "gift-quiz",
       "enabled": true,
       "src": "sweetgift-gift-quiz.js",
-      "version": "13",
+      "version": "14",
       "pages": ["all"]
     }
   ]
