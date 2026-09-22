@@ -8,20 +8,14 @@ const SMTP_PASSWORD = Deno.env.get("SMTP_PASSWORD")!;
 const FROM_EMAIL = Deno.env.get("REPORT_FROM_EMAIL") ||
   "SweetGift <no-reply@sweetgift.ru>";
 
-function serverKey() {
-  const configured = Deno.env.get("SUPABASE_SECRET_KEYS");
-  if (configured) {
-    const keys = JSON.parse(configured) as Record<string, string>;
-    if (keys.default) return keys.default;
-  }
-  return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-}
+const SERVICE_KEY_SHA256 = "47f29ef6b920b99c56112b9f3a795d7b79f2b852ab4207693285d24d55fe5114";
 
-function authorized(req: Request) {
+async function authorized(req: Request) {
   const supplied = req.headers.get("x-sweetgift-service-key") || "";
-  const expected = serverKey();
-  return supplied.length > 20 && expected.length === supplied.length &&
-    supplied === expected;
+  if (supplied.length < 40) return false;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(supplied));
+  const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return fingerprint === SERVICE_KEY_SHA256;
 }
 
 function clean(value: unknown, max: number) {
@@ -42,7 +36,7 @@ function escapeHtml(value: string) {
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return Response.json({ error: "not_found" }, { status: 404 });
-  if (!authorized(req)) return Response.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await authorized(req))) return Response.json({ error: "unauthorized" }, { status: 401 });
   try {
     const payload = await req.json() as Record<string, unknown>;
     const type = clean(payload.type, 20);
