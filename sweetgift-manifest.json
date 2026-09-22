@@ -1,5 +1,5 @@
 {
-  "version": "1.0.29",
+  "version": "1.0.30",
   "modules": [
     {
       "name": "core",
@@ -110,7 +110,7 @@
       "name": "gift-selector",
       "enabled": true,
       "src": "sweetgift-gift-selector.js",
-      "version": "9",
+      "version": "10",
       "pages": [
         "/podbor-po-sostavu",
         "/podbor-po-sostavu/",
@@ -119,10 +119,24 @@
       ]
     },
     {
+      "name": "proposal",
+      "enabled": true,
+      "src": "sweetgift-proposal.js",
+      "version": "1",
+      "pages": [
+        "/podbor-po-sostavu",
+        "/podbor-po-sostavu/",
+        "/podbor-naborov-po-sostavu",
+        "/podbor-naborov-po-sostavu/",
+        "/podbor-podarka",
+        "/podbor-podarka/"
+      ]
+    },
+    {
       "name": "gift-quiz",
       "enabled": true,
       "src": "sweetgift-gift-quiz.js",
-      "version": "11",
+      "version": "12",
       "pages": ["all"]
     }
   ]
