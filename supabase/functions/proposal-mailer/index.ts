@@ -18,7 +18,7 @@ function serverKey() {
 }
 
 function authorized(req: Request) {
-  const supplied = req.headers.get("apikey") || "";
+  const supplied = req.headers.get("x-sweetgift-service-key") || "";
   const expected = serverKey();
   return supplied.length > 20 && expected.length === supplied.length &&
     supplied === expected;
