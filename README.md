@@ -84,7 +84,7 @@ supabase/migrations/                история схемы и серверн�
 
 Project ref: `rvgvbxipccbkytmhltmi`.
 
-Edge Functions: `import-yml-products`, `import-articles-index`, `classify-articles`, `article-products`, `gift-selector-request`, `admin-dashboard`, `send-daily-report`.
+Edge Functions: `import-yml-products`, `import-articles-index`, `classify-articles`, `article-products`, `gift-selector-request`, `proposal-mailer`, `admin-dashboard`, `send-daily-report`.
 
 Схема, RPC и cron изменяются только через файлы в `supabase/migrations/`. Перед применением сверяйте локальный список с историей миграций проекта.
 

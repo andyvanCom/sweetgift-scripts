@@ -344,6 +344,13 @@ Loads small matching pages from a catalog prepared once per day.
       var shareBox = null;
       var shareAttempts = 0;
 
+      function updateProposal(results) {
+        var payload = { source: mode.requestType === 'basket' ? 'basket_selector' : 'box_selector', productKeys: results.slice(0, 12).map(function (item) { return item.product.product_key || item.product.url; }).filter(Boolean), mount: shell.querySelector('.sg-selector-toolbar') };
+        window.SG.proposalPending = window.SG.proposalPending || [];
+        window.SG.proposalPending.push(payload);
+        document.dispatchEvent(new CustomEvent('sg:proposal-selection', { detail: payload }));
+      }
+
       function shareTitle() {
         return selected.length
           ? mode.shareTitle +
@@ -468,6 +475,8 @@ Loads small matching pages from a catalog prepared once per day.
             '</section>';
           return;
         }
+
+        updateProposal(results);
 
         grid.innerHTML = results.map(function (result, index) {
           var product = result.product;
