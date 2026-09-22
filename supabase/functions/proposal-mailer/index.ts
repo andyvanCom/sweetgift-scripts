@@ -6,7 +6,7 @@ const SMTP_PORT = Number(Deno.env.get("SMTP_PORT") || "465");
 const SMTP_USER = Deno.env.get("SMTP_USER")!;
 const SMTP_PASSWORD = Deno.env.get("SMTP_PASSWORD")!;
 const FROM_EMAIL = Deno.env.get("REPORT_FROM_EMAIL") ||
-  "SweetGift <mail-reply@sweetgift.ru>";
+  "SweetGift <no-reply@sweetgift.ru>";
 
 function serverKey() {
   const configured = Deno.env.get("SUPABASE_SECRET_KEYS");
