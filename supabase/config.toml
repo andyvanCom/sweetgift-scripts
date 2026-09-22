@@ -44,7 +44,7 @@ entrypoint = "./functions/gift-selector-request/index.ts"
 
 [functions.proposal-mailer]
 enabled = true
-verify_jwt = false
+verify_jwt = true
 entrypoint = "./functions/proposal-mailer/index.ts"
 
 [functions.gift-selector-catalog]
