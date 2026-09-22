@@ -5,6 +5,7 @@
 - Public repository of frontend modules, Supabase Edge Functions, migrations and automations layered onto the existing SweetGift.ru Tilda site.
 - Tilda remains responsible for pages, catalog, articles and checkout. The repository adds a manifest-driven loader, analytics/SEO/selection modules, Supabase-backed imports and RPC, precomputed article-product JSON, admin functions and scheduled reporting.
 - Start with `README.md`; durable design references are `ARCHITECTURE.md`, `DATABASE.md`, `SCHEMA.md`, `FUNCTIONS.md` and `GIFT_QUIZ.md`. `APOLLO1_HANDOFF.md` is machine-transfer context, not a substitute for these source-of-truth documents.
+- Infrastructure identity is maintained in the operational backend repository at `docs/infrastructure.md`: `95.84.134.160` is the Rostelecom home Keenetic address, while `edge.voropaev.ru` is the Timeweb data-centre server at `201.24.53.162`. Never identify the home address as the edge server.
 
 ## Key contracts
 
