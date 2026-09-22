@@ -1,7 +1,7 @@
 /* SweetGift.ru | Live Gift Quiz */
 (function(){
   'use strict';
-  var sourceScript=document.currentScript,ROOT='.sg-gift-quiz',KEY='sg_gift_quiz_v2',RPC='get_gift_quiz_recommendations',CORE_URL=sourceScript&&sourceScript.dataset.quizCore||'https://app.sweetgift.ru/gift-quiz-core.v1.js';
+  var sourceScript=document.currentScript,ROOT='.sg-gift-quiz',KEY='sg_gift_quiz_v2',RPC='get_gift_quiz_recommendations',CORE_URL=sourceScript&&sourceScript.dataset.quizCore||'https://cdn.jsdelivr.net/gh/andyvanCom/sweetgift-scripts@main/gift-quiz-core.v1.js?v=1';
   var TYPE_MEDIA={},QS=[];
   function qc(){return window.SweetGiftQuizCore;}
   function configure(){TYPE_MEDIA=qc().giftTypeMedia;QS=qc().quizQuestions.map(function(q){return [q.key,q.title,q.options.map(function(o){return [o.value,o.label];}),function(a){return qc().isQuestionVisible(q,a);},q.type==='multiple',q.help,q.required];});}
