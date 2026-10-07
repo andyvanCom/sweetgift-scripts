@@ -1,4 +1,4 @@
-/* SweetGift.ru | Real workshop order photos v2
+/* SweetGift.ru | Real workshop order photos v3
  * Render only inside [data-sg-order-photos]. Public reviewed derivatives only.
  */
 (function () {
@@ -6,7 +6,7 @@
   var SELECTOR = '[data-sg-order-photos]';
   window.SG = window.SG || {};
   if (window.SG.orderPhotos) { window.SG.orderPhotos.scan(); return; }
-  var galleryUrl = 'https://api.sweetgift.ru/order-photos/gallery.json';
+  var galleryUrl = 'https://app.sweetgift.ru/order-photos/gallery.json';
   var galleryPromise;
   var STYLE = [
     "  [data-sg-orders], [data-sg-orders] * { box-sizing: border-box; }",
@@ -268,7 +268,7 @@
       });
     }).observe(document.body, { childList: true, subtree: true });
   }
-  window.SG.orderPhotos = { version: '2', init: init, scan: scan };
+  window.SG.orderPhotos = { version: '3', init: init, scan: scan };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 })();
