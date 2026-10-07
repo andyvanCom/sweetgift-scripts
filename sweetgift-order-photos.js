@@ -1,4 +1,4 @@
-/* SweetGift.ru | Real workshop order photos v1
+/* SweetGift.ru | Real workshop order photos v2
  * Render only inside [data-sg-order-photos]. Public reviewed derivatives only.
  */
 (function () {
@@ -6,9 +6,7 @@
   var SELECTOR = '[data-sg-order-photos]';
   window.SG = window.SG || {};
   if (window.SG.orderPhotos) { window.SG.orderPhotos.scan(); return; }
-  var scriptUrl = document.currentScript && document.currentScript.src;
-  if (!scriptUrl) return;
-  var galleryUrl = new URL('order-photos/gallery.json', scriptUrl).href;
+  var galleryUrl = 'https://api.sweetgift.ru/order-photos/gallery.json';
   var galleryPromise;
   var STYLE = [
     "  [data-sg-orders], [data-sg-orders] * { box-sizing: border-box; }",
@@ -103,7 +101,7 @@
       .then(function (data) {
         if (!data || data.version !== 1 || !Array.isArray(data.items)) throw new Error('Invalid gallery');
         var items = data.items.slice(0, 60).filter(function (item) {
-          return item && typeof item.src === 'string' && /^photos\/[a-z0-9-]+\.webp$/.test(item.src);
+          return item && typeof item.src === 'string' && /^photos\/[a-f0-9]{32}\.webp$/.test(item.src);
         }).map(function (item) {
           return { src: item.src, productTitle: typeof item.productTitle === 'string' ? item.productTitle.slice(0, 120) : '' };
         });
@@ -270,7 +268,7 @@
       });
     }).observe(document.body, { childList: true, subtree: true });
   }
-  window.SG.orderPhotos = { version: '1', init: init, scan: scan };
+  window.SG.orderPhotos = { version: '2', init: init, scan: scan };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 })();
