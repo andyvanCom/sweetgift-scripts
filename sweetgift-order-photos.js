@@ -1,4 +1,4 @@
-/* SweetGift.ru | Real workshop order photos v3
+/* SweetGift.ru | Real workshop order photos v4
  * Render only inside [data-sg-order-photos]. Public reviewed derivatives only.
  */
 (function () {
@@ -47,13 +47,16 @@
     "  [data-sg-orders] .sg-group { display: flex; gap: var(--sg-gap); padding-right: var(--sg-gap); flex: none; }",
     "  [data-sg-orders] .sg-card {",
     "    width: clamp(240px, 25vw, 310px); flex: none; margin: 0;",
-    "    border-radius: 16px; overflow: hidden; background: #eee9e3;",
+    "    border-radius: 32px; overflow: hidden; background: #fff;",
     "  }",
     "  [data-sg-orders] .sg-photo {",
     "    width: 100%; aspect-ratio: 4 / 5; display: block; object-fit: contain;",
-    "    background: #eee9e3; user-select: none; -webkit-user-drag: none;",
+    "    background: #eee9e3; border-radius: 32px; user-select: none; -webkit-user-drag: none;",
     "  }",
-    "  [data-sg-orders] .sg-name { margin: 0; padding: 14px 16px; font-size: 14px; line-height: 1.45; color: var(--sg-ink); }",
+    "  [data-sg-orders] .sg-name { margin: 0; padding: 16px 20px 20px; font-size: 14px; font-weight: 600; line-height: 1.45; color: var(--sg-ink); overflow-wrap: anywhere; }",
+    "  [data-sg-orders] .sg-name a { color: var(--sg-ink) !important; text-decoration: none; }",
+    "  [data-sg-orders] .sg-name a:hover { color: var(--sg-accent) !important; text-decoration: underline; text-underline-offset: 3px; }",
+    "  [data-sg-orders] .sg-name a:focus-visible { outline: 2px solid var(--sg-accent); outline-offset: 4px; border-radius: 3px; }",
     "  [data-sg-orders] .sg-footer { max-width: 1200px; margin: 21px auto 0; padding: 0 32px; display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; }",
     "  [data-sg-orders] .sg-footer p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--sg-muted); }",
     "  [data-sg-orders] .sg-footer strong { font-weight: 600; color: var(--sg-ink); }",
@@ -103,7 +106,7 @@
         var items = data.items.slice(0, 60).filter(function (item) {
           return item && typeof item.src === 'string' && /^photos\/[a-f0-9]{32}\.webp$/.test(item.src);
         }).map(function (item) {
-          return { src: item.src, productTitle: typeof item.productTitle === 'string' ? item.productTitle.slice(0, 120) : '' };
+          return { src: item.src, productTitle: typeof item.productTitle === 'string' ? item.productTitle.slice(0, 120) : '', productUrl: safeProductUrl(item.productUrl) };
         });
         if (!items.length) throw new Error('Empty gallery');
         return items;
@@ -111,6 +114,15 @@
       .catch(function (error) { galleryPromise = null; throw error; })
       .finally(function () { clearTimeout(timeout); });
     return galleryPromise;
+  }
+
+  function safeProductUrl(value) {
+    if (typeof value !== 'string' || value.length > 500 || /[\s\\]/u.test(value)) return '';
+    try {
+      var url = new URL(value);
+      if (url.protocol !== 'https:' || ['sweetgift.ru', 'www.sweetgift.ru'].indexOf(url.hostname) === -1 || url.port || url.username || url.password || url.search || url.hash || !/^\/(?:[a-z0-9_-]+\/)*tproduct\/\d+-[a-z0-9_%.-]+$/i.test(url.pathname)) return '';
+      return url.href;
+    } catch (_) { return ''; }
   }
 
   function ensureStyles() {
@@ -149,7 +161,12 @@
       figure.appendChild(image);
       if (photo.productTitle) {
         var caption = document.createElement('figcaption');
-        caption.className = 'sg-name'; caption.textContent = photo.productTitle;
+        caption.className = 'sg-name';
+        if (photo.productUrl) {
+          var link = document.createElement('a');
+          link.href = photo.productUrl; link.textContent = photo.productTitle;
+          caption.appendChild(link);
+        } else caption.textContent = photo.productTitle;
         figure.appendChild(caption);
       }
       group.appendChild(figure);
@@ -165,6 +182,7 @@
         copy.dataset.sgCopy = 'true'; copy.setAttribute('aria-hidden', 'true');
         copy.removeAttribute('role');
         copy.querySelectorAll('img').forEach(function (image) { image.alt = ''; });
+        copy.querySelectorAll('a').forEach(function (link) { link.tabIndex = -1; });
         track.appendChild(copy);
       }
       position = viewport.scrollLeft % cycle; viewport.scrollLeft = position;
@@ -268,7 +286,7 @@
       });
     }).observe(document.body, { childList: true, subtree: true });
   }
-  window.SG.orderPhotos = { version: '3', init: init, scan: scan };
+  window.SG.orderPhotos = { version: '4', init: init, scan: scan };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 })();
