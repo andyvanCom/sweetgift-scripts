@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "src": "photos/workshop-01.webp"
+    },
+    {
+      "src": "photos/workshop-02.webp"
+    },
+    {
+      "src": "photos/workshop-03.webp"
+    },
+    {
+      "src": "photos/workshop-04.webp"
+    },
+    {
+      "src": "photos/workshop-05.webp"
+    },
+    {
+      "src": "photos/workshop-06.webp"
+    }
+  ]
+}
