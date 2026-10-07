@@ -38,6 +38,6 @@ withoutContainer('loading');
 var manifest = JSON.parse(fs.readFileSync(path.join(root, 'sweetgift-manifest.json')));
 var module = manifest.modules.find(function (item) { return item.name === 'order-photos'; });
 assert(module && module.enabled && module.src === 'sweetgift-order-photos.js');
-assert(source.includes('https://api.sweetgift.ru/order-photos/gallery.json'));
+assert(source.includes('https://app.sweetgift.ru/order-photos/gallery.json'));
 assert(!fs.existsSync(path.join(root, 'order-photos/gallery.json')), 'No order photo data in public code repository');
 console.log('PASS: container-only activation, manifest and own API gallery URL.');
