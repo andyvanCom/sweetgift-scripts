@@ -1,11 +1,11 @@
 {
-  "version": "1.0.35",
+  "version": "1.0.36",
   "modules": [
     {
       "name": "order-photos",
       "enabled": true,
       "src": "sweetgift-order-photos.js",
-      "version": "5",
+      "version": "6",
       "pages": ["all"]
     },
     {
