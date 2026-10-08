@@ -9,7 +9,7 @@
 
 ## Key contracts
 
-- The workshop photo module refreshes the public manifest every five minutes only while a mounted gallery exists and the page is visible. Share requests between mounts, keep existing photos on failure, preserve pause state, and defer changes while users drag/hover/focus the carousel. Do not fetch private archives or poll on pages without the marker.
+- The public workshop collection is rebuilt by the server once nightly at 03:00 Europe/Moscow. The browser module loads it on page opening and shares requests between mounts; it must not poll on an open page or fetch private archives. Pages without the marker make no photo requests.
 
 - `sweetgift-manifest.json` is the source of truth for enabled frontend modules and versions. After changing a frontend asset, increment its manifest version so jsDelivr/Tilda clients receive it.
 - `sweetgift-order-photos.js` renders only inside `[data-sg-order-photos]`. Fetch the public gallery at `https://app.sweetgift.ru/order-photos/gallery.json` and its photos only when that container exists. Photos and gallery data live on the SweetGift API host, never in this public GitHub repository. The public gallery contains reviewed derivatives only: remove image metadata and visible personal information, and publish no order numbers, dates, chat captions or archive identifiers. Optional captions are verified product titles; productUrl must be a clean HTTPS sweetgift.ru tproduct URL without query/hash or credentials. Cloned carousel links must be removed from the keyboard tab order; private MAX originals must never be fetched by browser code.
