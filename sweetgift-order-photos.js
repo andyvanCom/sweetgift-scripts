@@ -1,4 +1,4 @@
-/* SweetGift.ru | Real workshop order photos v4
+/* SweetGift.ru | Real workshop order photos v5
  * Render only inside [data-sg-order-photos]. Public reviewed derivatives only.
  */
 (function () {
@@ -8,6 +8,8 @@
   if (window.SG.orderPhotos) { window.SG.orderPhotos.scan(); return; }
   var galleryUrl = 'https://app.sweetgift.ru/order-photos/gallery.json';
   var galleryPromise;
+  var galleryLoadedAt = 0;
+  var refreshTimer;
   var STYLE = [
     "  [data-sg-orders], [data-sg-orders] * { box-sizing: border-box; }",
     "  [data-sg-orders] {",
@@ -93,10 +95,11 @@
   ].join('\n');
 
   function loadGallery() {
-    if (galleryPromise) return galleryPromise;
+    if (galleryPromise && Date.now() - galleryLoadedAt < 60000) return galleryPromise;
+    galleryLoadedAt = Date.now();
     var controller = new AbortController();
     var timeout = setTimeout(function () { controller.abort(); }, 10000);
-    galleryPromise = fetch(galleryUrl, { signal: controller.signal, credentials: 'omit' })
+    galleryPromise = fetch(galleryUrl, { signal: controller.signal, credentials: 'omit', cache: 'no-cache' })
       .then(function (response) {
         if (!response.ok) throw new Error('Gallery unavailable');
         return response.json();
@@ -145,32 +148,41 @@
     var paused = reduced.matches, visible = true, hover = false, interacting = false;
     var resumeAt = 0, previous = 0, position = 0, cycle = 0, frame;
 
-    // Fisher–Yates: новый случайный порядок при каждом открытии страницы.
-    var photos = items.slice();
-    for (var i = photos.length - 1; i > 0; i--) {
-      var j = Math.floor(Math.random() * (i + 1));
-      var value = photos[i]; photos[i] = photos[j]; photos[j] = value;
-    }
-    photos.forEach(function (photo) {
-      var figure = document.createElement('figure');
-      figure.className = 'sg-card'; figure.setAttribute('role', 'listitem');
-      var image = document.createElement('img');
-      image.className = 'sg-photo'; image.src = new URL(photo.src, galleryUrl).href;
-      image.alt = photo.productTitle ? photo.productTitle + ' — фото из мастерской SweetGift' : 'Реальная композиция, собранная в мастерской SweetGift';
-      image.decoding = 'async'; image.draggable = false;
-      figure.appendChild(image);
-      if (photo.productTitle) {
-        var caption = document.createElement('figcaption');
-        caption.className = 'sg-name';
-        if (photo.productUrl) {
-          var link = document.createElement('a');
-          link.href = photo.productUrl; link.textContent = photo.productTitle;
-          caption.appendChild(link);
-        } else caption.textContent = photo.productTitle;
-        figure.appendChild(caption);
+    var signature = JSON.stringify(items), pendingItems;
+    // Keep controls and pause state when new photographs arrive.
+    mount._sgPhotoUpdate = function (nextItems) {
+      if (JSON.stringify(nextItems) !== signature) pendingItems = nextItems;
+    };
+    function fill(nextItems) {
+      group.textContent = '';
+      var photos = nextItems.slice();
+      for (var i = photos.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var value = photos[i]; photos[i] = photos[j]; photos[j] = value;
       }
-      group.appendChild(figure);
-    });
+      photos.forEach(function (photo) {
+        var figure = document.createElement('figure');
+        figure.className = 'sg-card'; figure.setAttribute('role', 'listitem');
+        var image = document.createElement('img');
+        image.className = 'sg-photo'; image.src = new URL(photo.src, galleryUrl).href;
+        image.alt = photo.productTitle ? photo.productTitle + ' — фото из мастерской SweetGift' : 'Реальная композиция, собранная в мастерской SweetGift';
+        image.decoding = 'async'; image.draggable = false;
+        figure.appendChild(image);
+        if (photo.productTitle) {
+          var caption = document.createElement('figcaption');
+          caption.className = 'sg-name';
+          if (photo.productUrl) {
+            var link = document.createElement('a');
+            link.href = photo.productUrl; link.textContent = photo.productTitle;
+            caption.appendChild(link);
+          } else caption.textContent = photo.productTitle;
+          figure.appendChild(caption);
+        }
+        group.appendChild(figure);
+      });
+      signature = JSON.stringify(nextItems);
+    }
+    fill(items);
     function measure() {
       track.querySelectorAll('[data-sg-copy]').forEach(function (copy) { copy.remove(); });
       cycle = group.getBoundingClientRect().width;
@@ -225,6 +237,7 @@
 
     function animate(now) {
       if (!root.isConnected) {
+        delete mount._sgPhotoUpdate;
         cancelAnimationFrame(frame);
         if (intersectionObserver) intersectionObserver.disconnect();
         if (resizeObserver) resizeObserver.disconnect();
@@ -237,7 +250,11 @@
       }
       var seconds = previous ? Math.min((now - previous) / 1000, .05) : 0;
       previous = now;
-      if (!paused && visible && !document.hidden && !hover && !interacting && now >= resumeAt && document.activeElement !== viewport && cycle > 0) {
+      var canUpdate = visible && !document.hidden && !hover && !interacting && now >= resumeAt && !viewport.contains(document.activeElement);
+      if (pendingItems && canUpdate) {
+        fill(pendingItems); pendingItems = null; measure();
+      }
+      if (!paused && canUpdate && cycle > 0) {
         position = (position + SPEED * seconds) % cycle;
         viewport.scrollLeft = position;
       } else position = viewport.scrollLeft;
@@ -259,6 +276,7 @@
       if (!mount.isConnected) { mount.removeAttribute('data-sg-photos-state'); return; }
       render(mount, items);
       mount.setAttribute('data-sg-photos-state', 'ready');
+      if (!refreshTimer) refreshTimer = setInterval(refresh, 300000);
     }).catch(function () {
       mount.textContent = '';
       mount.setAttribute('data-sg-photos-state', 'error');
@@ -271,6 +289,15 @@
       });
       mount.appendChild(status); mount.appendChild(retry);
     });
+  }
+  function refresh() {
+    var mounts = Array.prototype.filter.call(document.querySelectorAll(SELECTOR), function (mount) { return typeof mount._sgPhotoUpdate === 'function'; });
+    if (!mounts.length) { clearInterval(refreshTimer); refreshTimer = null; return; }
+    if (document.hidden) return;
+    // One shared request for all live mounts; a failure preserves the visible gallery.
+    loadGallery().then(function (items) {
+      mounts.forEach(function (mount) { if (mount.isConnected && mount._sgPhotoUpdate) mount._sgPhotoUpdate(items); });
+    }).catch(function () {});
   }
   function scan() { document.querySelectorAll(SELECTOR).forEach(init); }
   function start() {
@@ -286,7 +313,7 @@
       });
     }).observe(document.body, { childList: true, subtree: true });
   }
-  window.SG.orderPhotos = { version: '4', init: init, scan: scan };
+  window.SG.orderPhotos = { version: '5', init: init, scan: scan, refresh: refresh };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();
 })();
