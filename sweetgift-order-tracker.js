@@ -274,6 +274,11 @@ SweetGift.ru | Anonymous Order Tracker
       sg_cart_items: cartSummary(cart)
     };
 
+    var attribution = window.SG.orderAttribution && window.SG.orderAttribution.context();
+    if (attribution) Object.keys(attribution).forEach(function (key) {
+      fields['sg_original_' + key] = attribution[key];
+    });
+
     Object.keys(current).forEach(function (key) {
       fields['sg_' + key] = current[key];
       if (firstTouch && firstTouch[key]) fields['sg_first_' + key] = firstTouch[key];
@@ -344,6 +349,7 @@ SweetGift.ru | Anonymous Order Tracker
   }
 
   function orderId(cart, form, savedFields) {
+    if (form && form.__sgStableOrderId) return form.__sgStableOrderId;
     var value = firstValue(form, ['tildaOrderId', 'tildaTranId']) ||
       firstValue(window.tildaForm || {}, ['orderIdForStat', 'orderid', 'orderId']) ||
       firstValue(cart, ['orderid', 'orderId', 'order_id', 'id']) ||
@@ -353,12 +359,19 @@ SweetGift.ru | Anonymous Order Tracker
         savedFields
       );
 
-    if (value) return cleanText(value, 160);
+    if (value) {
+      value = cleanText(value, 160);
+      if (form) form.__sgStableOrderId = value;
+      return value;
+    }
 
     var existing;
     try {
       existing = window.sessionStorage.getItem('sg_pending_order_id');
-      if (existing) return existing;
+      if (existing) {
+        if (form) form.__sgStableOrderId = existing;
+        return existing;
+      }
     } catch (e) {}
 
     value = 'tilda-' + Date.now() + '-' + Math.random().toString(36).slice(2, 10);
@@ -366,6 +379,7 @@ SweetGift.ru | Anonymous Order Tracker
       window.sessionStorage.setItem('sg_pending_order_id', value);
     } catch (e2) {}
 
+    if (form) form.__sgStableOrderId = value;
     return value;
   }
 
@@ -422,6 +436,7 @@ SweetGift.ru | Anonymous Order Tracker
 
     return {
       order_id: orderId(cart, form, savedFields),
+      attribution: window.SG.orderAttribution ? window.SG.orderAttribution.context() : null,
       items: products.slice(0, 100).map(normalizeItem),
       order_total: orderTotal,
       subtotal: subtotal,
@@ -595,6 +610,10 @@ SweetGift.ru | Anonymous Order Tracker
   document.addEventListener('submit', function (event) {
     var form = event.target && event.target.tagName === 'FORM' ? event.target : null;
     if (!isCartForm(form)) return;
+
+    // A repeated aftersuccess keeps its ID; a genuinely new submit starts a
+    // new checkout after the preceding order has been persisted.
+    if (form.__sgStableOrderId && wasSent(form.__sgStableOrderId)) delete form.__sgStableOrderId;
 
     var cartSnapshot = copyCart();
     enrichCrmForm(form, cartSnapshot);

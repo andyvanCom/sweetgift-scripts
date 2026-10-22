@@ -1,5 +1,5 @@
 {
-  "version": "1.0.36",
+  "version": "1.0.37",
   "modules": [
     {
       "name": "order-photos",
@@ -30,10 +30,17 @@
       "pages": ["all"]
     },
     {
+      "name": "order-attribution",
+      "enabled": true,
+      "src": "sweetgift-order-attribution.js",
+      "version": "1",
+      "pages": ["all"]
+    },
+    {
       "name": "order-tracker",
       "enabled": true,
       "src": "sweetgift-order-tracker.js",
-      "version": "7",
+      "version": "8",
       "pages": ["all"]
     },
     {

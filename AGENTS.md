@@ -9,6 +9,8 @@
 
 ## Key contracts
 
+- Order attribution is captured by `sweetgift-order-attribution.js` only in the public SweetGift browser checkout and submitted alongside the native Tilda order through `track_product_order`. Private `neuromaria.order_attribution` is first-write-wins and unreadable by anon/authenticated; server RPCs are service-role-only. Preserve ClientID as a string, obtain it through getClientID with genuine cookie fallback, and never synthesize missing advertising identifiers or promote numeric UTM labels to verified Direct campaigns. The browser never sends order-created/paid business conversions. Deploy its migration before the capture module; follow `docs/order-attribution.md` and the backend cohort-cutover runbook before enabling a sender.
+
 - The public workshop collection is rebuilt by the server once nightly at 03:00 Europe/Moscow. The browser module loads it on page opening and shares requests between mounts; it must not poll on an open page or fetch private archives. Pages without the marker make no photo requests.
 
 - `sweetgift-manifest.json` is the source of truth for enabled frontend modules and versions. After changing a frontend asset, increment its manifest version so jsDelivr/Tilda clients receive it.
