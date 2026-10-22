@@ -16,7 +16,7 @@ Supabase record therefore supplies the backend independently of that mapping.
 No token, contact, order note or payment assertion is captured by this module.
 It does not call order_created/order_paid goals.
 
-Migration `20261022094858_order_attribution_capture.sql` creates the closed
+Migration `20261022102133_order_attribution_capture.sql` creates the closed
 `neuromaria.order_attribution` table and augments the deployed product RPC
 without replacing its item processing. The migration fails if the deployed
 function's expected final-return marker has changed. Original payloads without

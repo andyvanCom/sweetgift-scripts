@@ -16,7 +16,7 @@ create function public.track_product_event(text,text,text,text,text,text,text,te
  returns void language sql as 'select';
 `);
 await db.exec(fs.readFileSync(new URL('../supabase/migrations/20260718120000_order_analytics.sql',import.meta.url),'utf8'));
-await db.exec(fs.readFileSync(new URL('../supabase/migrations/20261022094858_order_attribution_capture.sql',import.meta.url),'utf8'));
+await db.exec(fs.readFileSync(new URL('../supabase/migrations/20261022102133_order_attribution_capture.sql',import.meta.url),'utf8'));
 const order={order_id:'T202610-1234567890',items:[{product_key:'gift',product_title:'Gift',quantity:1,price:1200}],order_total:1200,attribution:{client_id:'1234567890123456789',yclid:'9876543210123456789',utm_campaign:'123456789',landing_page:'https://sweetgift.ru/catalog?phone=79991234567',phone:'forbidden',token:'forbidden'}};
 await db.exec('set role anon');
 const created=await db.query('select public.track_product_order($1::jsonb) as result',[JSON.stringify(order)]);
