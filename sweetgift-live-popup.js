@@ -205,16 +205,18 @@ SweetGift.ru | Live Activity Popup v7
     return list[Math.floor(Math.random() * list.length)];
   }
 
-  function isArticlePage() {
-    return /^\/stati\/[^/]/.test(window.location.pathname);
+  function isPromoPage() {
+    return /^\/(?:stati|povod)\/[^/]/.test(window.location.pathname);
   }
 
-  function articlePromoUrl(path, content) {
-    return path + '?utm_source=stati&utm_medium=popup' +
-      '&utm_campaign=article_rotation&utm_content=' + encodeURIComponent(content);
+  function promoUrl(path, content) {
+    var section = /^\/povod\//.test(window.location.pathname) ? 'povod' : 'stati';
+    var campaign = section === 'povod' ? 'povod_rotation' : 'article_rotation';
+    return path + '?utm_source=' + section + '&utm_medium=popup' +
+      '&utm_campaign=' + campaign + '&utm_content=' + encodeURIComponent(content);
   }
 
-  // The fourth article slot uses real recent activity instead of a static offer.
+  // Articles and occasion pages share one rotation; the fourth slot uses real activity.
   var ARTICLE_PROMOS = [
     {
       product_key: '/',
@@ -223,13 +225,13 @@ SweetGift.ru | Live Activity Popup v7
       popupMessage: { icon: '✨', label: 'Ваш промокод — BOOK' }
     },
     {
-      product_key: articlePromoUrl('/podbor-po-sostavu', 'composition'),
+      product_key: promoUrl('/podbor-po-sostavu', 'composition'),
       title: 'Выберите любимые продукты — найдём подходящую подарочную корзину',
       emoji: '🧺',
       popupMessage: { icon: '✨', label: 'Подберите корзину по составу' }
     },
     {
-      product_key: articlePromoUrl('/podbor-podarka', 'gift_quiz'),
+      product_key: promoUrl('/podbor-podarka', 'gift_quiz'),
       title: 'Выберите подарок быстро и удобно — ответьте на несколько вопросов прямо сейчас',
       emoji: '🎯',
       popupMessage: { icon: '✨', label: 'Поможем выбрать подарок' }
@@ -424,7 +426,7 @@ SweetGift.ru | Live Activity Popup v7
       var isQuizTest = window.location.search.indexOf('testpopup=quiz') !== -1;
       var isTestMode = isQuizTest || window.location.search.indexOf('testpopup=1') !== -1;
 
-      if (isArticlePage() && !isQuizTest) {
+      if (isPromoPage() && !isQuizTest) {
         startArticleSequence(isTestMode ? 1000 : CONFIG.popupDelay);
         return;
       }

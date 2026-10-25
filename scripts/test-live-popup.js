@@ -92,7 +92,8 @@ function runtime(options) {
 }
 
 async function run() {
-  function checkPopup(popup, slot) {
+  function checkPopup(popup, slot, section) {
+    section = section || 'stati';
     if (slot === 0) {
       assert.match(popup.innerHTML, /BOOK/);
       assert.match(popup.innerHTML, /на любую композицию при заказе сегодня/);
@@ -100,9 +101,9 @@ async function run() {
     } else if (slot < 3) {
       var url = new URL(popup.href, 'https://sweetgift.ru');
       assert.equal(url.pathname, slot === 1 ? '/podbor-po-sostavu' : '/podbor-podarka');
-      assert.equal(url.searchParams.get('utm_source'), 'stati');
+      assert.equal(url.searchParams.get('utm_source'), section);
       assert.equal(url.searchParams.get('utm_medium'), 'popup');
-      assert.equal(url.searchParams.get('utm_campaign'), 'article_rotation');
+      assert.equal(url.searchParams.get('utm_campaign'), section === 'povod' ? 'povod_rotation' : 'article_rotation');
       assert.equal(url.searchParams.get('utm_content'), slot === 1 ? 'composition' : 'gift_quiz');
       if (slot === 2) assert.match(popup.innerHTML, /быстро и удобно/);
     } else {
@@ -110,42 +111,45 @@ async function run() {
     }
   }
 
-  var local = {};
-  for (var cycle = 0; cycle < 2; cycle++) {
-    for (var slot of [0, 2]) {
-      var visit = runtime({ local: local, session: { [sessionKey]: '1' } });
-      assert.equal(visit.tasks[0].delay, 12000);
-      visit.init();
-      assert.equal(visit.tasks.length, 1);
-      await visit.advance(11999);
-      assert.equal(visit.shown.length, 0);
-      await visit.advance(1);
-      assert.equal(visit.nodes.length, 1);
-      checkPopup(visit.nodes[0], slot);
-      assert.equal(visit.shown[0].time, 12000);
-      assert.equal(local[articleKey], String(slot + 1));
-      await visit.advance(24999);
-      assert.equal(visit.hidden.length, 0);
-      await visit.advance(1);
-      assert.deepEqual(visit.hidden, [37000]);
-      await visit.advance(29999);
-      assert.equal(visit.nodes.length, 0);
-      assert.equal(visit.shown.length, 1);
-      await visit.advance(1);
-      checkPopup(visit.nodes[0], slot + 1);
-      assert.equal(visit.shown[1].time, 67000);
-      assert.equal(local[articleKey], String((slot + 2) % 4));
-      await visit.advance(25000);
-      assert.deepEqual(visit.hidden, [37000, 92000]);
-      await visit.advance(120000);
-      assert.equal(visit.shown.length, 2);
-      assert.equal(visit.nodes.length, 0);
-      assert.equal(visit.calls.length, slot === 2 ? 1 : 0);
-      assert.equal(local[oldKey], undefined);
-      assert.equal(visit.session[sessionKey], '1');
-      var nextPage = runtime({ local: Object.assign({}, local), session: visit.session, pathname: '/stati/second' });
-      await nextPage.run();
-      checkPopup(nextPage.nodes[0], (slot + 2) % 4);
+  for (var section of ['stati', 'povod']) {
+    var local = {};
+    for (var cycle = 0; cycle < 2; cycle++) {
+      for (var slot of [0, 2]) {
+        var visit = runtime({ pathname: '/' + section + '/example', local: local, session: { [sessionKey]: '1' } });
+        assert.equal(visit.tasks[0].delay, 12000);
+        visit.init();
+        assert.equal(visit.tasks.length, 1);
+        await visit.advance(11999);
+        assert.equal(visit.shown.length, 0);
+        await visit.advance(1);
+        assert.equal(visit.nodes.length, 1);
+        checkPopup(visit.nodes[0], slot, section);
+        assert.equal(visit.shown[0].time, 12000);
+        assert.equal(local[articleKey], String(slot + 1));
+        await visit.advance(24999);
+        assert.equal(visit.hidden.length, 0);
+        await visit.advance(1);
+        assert.deepEqual(visit.hidden, [37000]);
+        await visit.advance(29999);
+        assert.equal(visit.nodes.length, 0);
+        assert.equal(visit.shown.length, 1);
+        await visit.advance(1);
+        checkPopup(visit.nodes[0], slot + 1, section);
+        assert.equal(visit.shown[1].time, 67000);
+        assert.equal(local[articleKey], String((slot + 2) % 4));
+        await visit.advance(25000);
+        assert.deepEqual(visit.hidden, [37000, 92000]);
+        await visit.advance(120000);
+        assert.equal(visit.shown.length, 2);
+        assert.equal(visit.nodes.length, 0);
+        assert.equal(visit.calls.length, slot === 2 ? 1 : 0);
+        assert.equal(local[oldKey], undefined);
+        assert.equal(visit.session[sessionKey], '1');
+        var nextSection = section === 'stati' ? 'povod' : 'stati';
+        var nextPage = runtime({ local: Object.assign({}, local), session: visit.session, pathname: '/' + nextSection + '/second' });
+        await nextPage.run();
+        checkPopup(nextPage.nodes[0], (slot + 2) % 4, nextSection);
+      }
     }
   }
 
@@ -186,7 +190,7 @@ async function run() {
   assert.equal(failedSecond.shown.length, 1);
   assert.equal(failedSecond.local[articleKey], '3');
 
-  for (var pathname of ['/', '/stati', '/stati/', '/catalog', '/stati-other/example', '/podbor-podarka']) {
+  for (var pathname of ['/', '/stati', '/stati/', '/povod', '/povod/', '/catalog', '/stati-other/example', '/povod-other/example', '/podbor-podarka']) {
     var ordinary = runtime({ pathname: pathname, local: { [oldKey]: '3', [articleKey]: '2' } });
     await ordinary.run();
     assert.equal(ordinary.nodes[0].href, pathname === '/podbor-podarka' ? product.product_key : '/podbor-podarka');
@@ -205,7 +209,7 @@ async function run() {
   await preview.run();
   assert.equal(preview.nodes[0].href, '/podbor-podarka');
   assert.equal(preview.local[articleKey], undefined);
-  console.log('live-popup: two article teasers at 12s/67s, 25s duration, 30s gap, rotation, UTM, errors and ordinary pages passed');
+  console.log('live-popup: stati/povod teasers at 12s/67s, 25s duration, 30s gap, shared rotation, section UTM, errors and ordinary pages passed');
 }
 
 run().catch(function (error) { console.error(error); process.exitCode = 1; });
