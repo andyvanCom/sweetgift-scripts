@@ -1,6 +1,6 @@
 /*
 ===========================================================================
-SweetGift.ru | Live Activity Popup v6
+SweetGift.ru | Live Activity Popup v7
 ---------------------------------------------------------------------------
 Асинхронный попап живой активности.
 Использует SweetGift Core, если он загружен.
@@ -20,9 +20,12 @@ SweetGift.ru | Live Activity Popup v6
     visibleTime: 25000,
     sessionKey: 'sg_live_popup_shown_v6',
     rotationKey: 'sg_live_popup_rotation_v1',
+    articleRotationKey: 'sg_article_popup_rotation_v1',
     quizEvery: 4,
     cssId: 'sg-live-popup-css-v6'
   };
+
+  var articleRotationIndex = 0;
 
   function log() {
     if (window.SG && window.SG.debug) {
@@ -200,6 +203,37 @@ SweetGift.ru | Live Activity Popup v6
     return list[Math.floor(Math.random() * list.length)];
   }
 
+  function isArticlePage() {
+    return /^\/stati\/[^/]/.test(window.location.pathname);
+  }
+
+  function articlePromoUrl(path, content) {
+    return path + '?utm_source=stati&utm_medium=popup' +
+      '&utm_campaign=article_rotation&utm_content=' + encodeURIComponent(content);
+  }
+
+  // The fourth article slot uses real recent activity instead of a static offer.
+  var ARTICLE_PROMOS = [
+    {
+      product_key: '/',
+      title: 'Скидка на любую композицию при заказе сегодня. Промокод BOOK',
+      emoji: '🎁',
+      popupMessage: { icon: '✨', label: 'Ваш промокод — BOOK' }
+    },
+    {
+      product_key: articlePromoUrl('/podbor-po-sostavu', 'composition'),
+      title: 'Выберите любимые продукты — найдём подходящую подарочную корзину',
+      emoji: '🧺',
+      popupMessage: { icon: '✨', label: 'Подберите корзину по составу' }
+    },
+    {
+      product_key: articlePromoUrl('/podbor-podarka', 'gift_quiz'),
+      title: 'Выберите подарок быстро и удобно — ответьте на несколько вопросов прямо сейчас',
+      emoji: '🎯',
+      popupMessage: { icon: '✨', label: 'Поможем выбрать подарок' }
+    }
+  ];
+
   function getMessage(item) {
     if (item.popupMessage) return item.popupMessage;
 
@@ -231,8 +265,8 @@ SweetGift.ru | Live Activity Popup v6
   }
 
   function showPopup(item) {
-    if (!item || !item.title || !item.product_key) return;
-    if (document.querySelector('.sg-live-popup')) return;
+    if (!item || !item.title || !item.product_key) return false;
+    if (document.querySelector('.sg-live-popup')) return false;
 
     injectCss();
 
@@ -271,6 +305,7 @@ SweetGift.ru | Live Activity Popup v6
     }, CONFIG.visibleTime);
 
     log('Popup shown', item);
+    return true;
   }
 
   function hidePopup(popup) {
@@ -292,6 +327,12 @@ SweetGift.ru | Live Activity Popup v6
       return;
     }
 
+    loadRecentActivity(function () {
+      sessionStorage.setItem(CONFIG.sessionKey, '1');
+    });
+  }
+
+  function loadRecentActivity(onShown) {
     getSupabaseClient(function (sb) {
       if (!sb || typeof sb.rpc !== 'function') return;
 
@@ -301,14 +342,39 @@ SweetGift.ru | Live Activity Popup v6
 
           if (res.error || !res.data || !res.data.length) return;
 
-          sessionStorage.setItem(CONFIG.sessionKey, '1');
-
-          showPopup(randomItem(res.data));
+          if (showPopup(randomItem(res.data)) && onShown) onShown();
         })
         .catch(function (err) {
           log('RPC error', err);
         });
     });
+  }
+
+  function showArticlePopup() {
+    var index = articleRotationIndex;
+    try {
+      var stored = localStorage.getItem(CONFIG.articleRotationKey);
+      if (stored !== null) index = Number(stored);
+    } catch (e) {
+      log('Article rotation storage unavailable');
+    }
+    if (!Number.isInteger(index) || index < 0 || index > 3) index = 0;
+
+    function onShown() {
+      articleRotationIndex = (index + 1) % 4;
+      try {
+        localStorage.setItem(CONFIG.articleRotationKey, String(articleRotationIndex));
+      } catch (e) {
+        log('Article rotation could not be saved');
+      }
+      safe(function () { sessionStorage.setItem(CONFIG.sessionKey, '1'); });
+    }
+
+    if (index === 3) {
+      loadRecentActivity(onShown);
+    } else if (showPopup(ARTICLE_PROMOS[index])) {
+      onShown();
+    }
   }
 
   function showQuizPromo() {
@@ -341,7 +407,9 @@ SweetGift.ru | Live Activity Popup v6
       var isQuizTest = window.location.search.indexOf('testpopup=quiz') !== -1;
       var isTestMode = isQuizTest || window.location.search.indexOf('testpopup=1') !== -1;
 
-      if (!isTestMode && sessionStorage.getItem(CONFIG.sessionKey)) {
+      var alreadyShown = false;
+      safe(function () { alreadyShown = sessionStorage.getItem(CONFIG.sessionKey); });
+      if (!isTestMode && alreadyShown) {
         log('Already shown in this session');
         return;
       }
@@ -351,7 +419,11 @@ SweetGift.ru | Live Activity Popup v6
           showQuizPromo();
           return;
         }
-        loadActivity();
+        if (isArticlePage()) {
+          showArticlePopup();
+        } else {
+          loadActivity();
+        }
       }, isTestMode ? 1000 : CONFIG.popupDelay);
     });
   }
