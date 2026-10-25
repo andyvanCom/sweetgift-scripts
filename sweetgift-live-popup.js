@@ -18,6 +18,7 @@ SweetGift.ru | Live Activity Popup v7
     supabaseKey: 'sb_publishable_JrPJQVLLpcDxjte5OSCnvg_ocvpBqqT',
     popupDelay: 12000,
     visibleTime: 25000,
+    articlePause: 30000,
     sessionKey: 'sg_live_popup_shown_v6',
     rotationKey: 'sg_live_popup_rotation_v1',
     articleRotationKey: 'sg_article_popup_rotation_v1',
@@ -26,6 +27,7 @@ SweetGift.ru | Live Activity Popup v7
   };
 
   var articleRotationIndex = 0;
+  var articleSequenceStarted = false;
 
   function log() {
     if (window.SG && window.SG.debug) {
@@ -350,7 +352,7 @@ SweetGift.ru | Live Activity Popup v7
     });
   }
 
-  function showArticlePopup() {
+  function showArticlePopup(afterShown) {
     var index = articleRotationIndex;
     try {
       var stored = localStorage.getItem(CONFIG.articleRotationKey);
@@ -368,6 +370,7 @@ SweetGift.ru | Live Activity Popup v7
         log('Article rotation could not be saved');
       }
       safe(function () { sessionStorage.setItem(CONFIG.sessionKey, '1'); });
+      if (afterShown) afterShown();
     }
 
     if (index === 3) {
@@ -375,6 +378,20 @@ SweetGift.ru | Live Activity Popup v7
     } else if (showPopup(ARTICLE_PROMOS[index])) {
       onShown();
     }
+  }
+
+  function startArticleSequence(delay) {
+    if (articleSequenceStarted) return;
+    articleSequenceStarted = true;
+
+    setTimeout(function () {
+      showArticlePopup(function () {
+        // Keep the full reading interval even when the first teaser is closed early.
+        setTimeout(function () {
+          showArticlePopup();
+        }, CONFIG.visibleTime + CONFIG.articlePause);
+      });
+    }, delay);
   }
 
   function showQuizPromo() {
@@ -407,6 +424,11 @@ SweetGift.ru | Live Activity Popup v7
       var isQuizTest = window.location.search.indexOf('testpopup=quiz') !== -1;
       var isTestMode = isQuizTest || window.location.search.indexOf('testpopup=1') !== -1;
 
+      if (isArticlePage() && !isQuizTest) {
+        startArticleSequence(isTestMode ? 1000 : CONFIG.popupDelay);
+        return;
+      }
+
       var alreadyShown = false;
       safe(function () { alreadyShown = sessionStorage.getItem(CONFIG.sessionKey); });
       if (!isTestMode && alreadyShown) {
@@ -419,11 +441,7 @@ SweetGift.ru | Live Activity Popup v7
           showQuizPromo();
           return;
         }
-        if (isArticlePage()) {
-          showArticlePopup();
-        } else {
-          loadActivity();
-        }
+        loadActivity();
       }, isTestMode ? 1000 : CONFIG.popupDelay);
     });
   }
