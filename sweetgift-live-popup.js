@@ -28,6 +28,7 @@ SweetGift.ru | Live Activity Popup v7
 
   var articleRotationIndex = 0;
   var articleSequenceStarted = false;
+  var articleActivity = null;
 
   function log() {
     if (window.SG && window.SG.debug) {
@@ -337,6 +338,12 @@ SweetGift.ru | Live Activity Popup v7
   }
 
   function loadRecentActivity(onShown) {
+    fetchRecentActivity(function (items) {
+      if (items.length && showPopup(randomItem(items)) && onShown) onShown();
+    });
+  }
+
+  function fetchRecentActivity(callback) {
     getSupabaseClient(function (sb) {
       if (!sb || typeof sb.rpc !== 'function') return;
 
@@ -344,17 +351,16 @@ SweetGift.ru | Live Activity Popup v7
         .then(function (res) {
           log('RPC result', res);
 
-          if (res.error || !res.data || !res.data.length) return;
-
-          if (showPopup(randomItem(res.data)) && onShown) onShown();
+          callback(!res.error && Array.isArray(res.data) ? res.data : []);
         })
         .catch(function (err) {
           log('RPC error', err);
+          callback([]);
         });
     });
   }
 
-  function showArticlePopup(afterShown) {
+  function currentArticleIndex() {
     var index = articleRotationIndex;
     try {
       var stored = localStorage.getItem(CONFIG.articleRotationKey);
@@ -363,6 +369,11 @@ SweetGift.ru | Live Activity Popup v7
       log('Article rotation storage unavailable');
     }
     if (!Number.isInteger(index) || index < 0 || index > 3) index = 0;
+    return index;
+  }
+
+  function showArticlePopup(afterShown) {
+    var index = currentArticleIndex();
 
     function onShown() {
       articleRotationIndex = (index + 1) % 4;
@@ -376,7 +387,8 @@ SweetGift.ru | Live Activity Popup v7
     }
 
     if (index === 3) {
-      loadRecentActivity(onShown);
+      // Never let a slow external request turn into a late popup.
+      if (articleActivity && articleActivity.length && showPopup(randomItem(articleActivity))) onShown();
     } else if (showPopup(ARTICLE_PROMOS[index])) {
       onShown();
     }
@@ -385,6 +397,10 @@ SweetGift.ru | Live Activity Popup v7
   function startArticleSequence(delay) {
     if (articleSequenceStarted) return;
     articleSequenceStarted = true;
+
+    if (currentArticleIndex() >= 2) {
+      fetchRecentActivity(function (items) { articleActivity = items; });
+    }
 
     setTimeout(function () {
       showArticlePopup(function () {

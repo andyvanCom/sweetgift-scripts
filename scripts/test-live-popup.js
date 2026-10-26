@@ -23,6 +23,7 @@ function runtime(options) {
   var now = 0;
   var shown = [];
   var hidden = [];
+  var pendingActivity = [];
 
   function storage(values) {
     return {
@@ -56,6 +57,7 @@ function runtime(options) {
     SG: { core: { supabase: function (callback) {
       callback({ rpc: function (name) {
         calls.push(name);
+        if (options.deferRpc) return new Promise(function (resolve) { pendingActivity.push(resolve); });
         if (options.rpcReject) return Promise.reject(new Error('Offline'));
         return Promise.resolve({ data: options.products || [product], error: options.rpcError || null });
       } });
@@ -71,6 +73,10 @@ function runtime(options) {
   return {
     local: local, session: session, nodes: nodes, calls: calls, tasks: tasks, shown: shown, hidden: hidden,
     init: function () { window.SG.livePopup.init(); },
+    resolveActivity: async function () {
+      pendingActivity.forEach(function (resolve) { resolve({ data: [product], error: null }); });
+      for (var i = 0; i < 4; i++) await Promise.resolve();
+    },
     advance: async function (duration) {
       var target = now + duration;
       while (true) {
@@ -117,6 +123,7 @@ async function run() {
       for (var slot of [0, 2]) {
         var visit = runtime({ pathname: '/' + section + '/example', local: local, session: { [sessionKey]: '1' } });
         assert.equal(visit.tasks[0].delay, 12000);
+        assert.equal(visit.calls.length, slot === 2 ? 1 : 0, 'prefetch starts before the first teaser');
         visit.init();
         assert.equal(visit.tasks.length, 1);
         await visit.advance(11999);
@@ -189,6 +196,22 @@ async function run() {
   await failedSecond.advance(200000);
   assert.equal(failedSecond.shown.length, 1);
   assert.equal(failedSecond.local[articleKey], '3');
+
+  var firstProduct = runtime({ local: { [articleKey]: '3' } });
+  await firstProduct.advance(11999);
+  await firstProduct.advance(1);
+  checkPopup(firstProduct.nodes[0], 3);
+  await firstProduct.advance(55000);
+  checkPopup(firstProduct.nodes[0], 0);
+  assert.equal(firstProduct.calls.length, 1);
+
+  var slowActivity = runtime({ local: { [articleKey]: '2' }, deferRpc: true });
+  await slowActivity.advance(67000);
+  assert.equal(slowActivity.shown.length, 1);
+  assert.equal(slowActivity.local[articleKey], '3');
+  await slowActivity.resolveActivity();
+  await slowActivity.advance(120000);
+  assert.equal(slowActivity.shown.length, 1, 'late activity cannot produce a late teaser');
 
   for (var pathname of ['/', '/stati', '/stati/', '/povod', '/povod/', '/catalog', '/stati-other/example', '/povod-other/example', '/podbor-podarka']) {
     var ordinary = runtime({ pathname: pathname, local: { [oldKey]: '3', [articleKey]: '2' } });
