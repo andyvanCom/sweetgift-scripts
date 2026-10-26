@@ -1,5 +1,5 @@
 {
-  "version": "1.0.40",
+  "version": "1.0.41",
   "modules": [
     {
       "name": "order-photos",
@@ -54,7 +54,7 @@
       "name": "live-popup",
       "enabled": true,
       "src": "sweetgift-live-popup.js",
-      "version": "6",
+      "version": "7",
       "pages": ["all"]
     },
     {
