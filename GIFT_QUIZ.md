@@ -86,3 +86,18 @@ roles.
 Специализированные алкогольные разделы исключаются серверной логикой, общей с
 остальными публичными подборками. После изменения правил каталога или состава
 необходимо проверить обе ветки корзин/боксов и отдельную ветку клубники.
+
+## Loading and retries
+
+Catalog recommendations use `core.rpcRead`, whose form-encoded request avoids
+a separate browser CORS preflight. Serialize `p_answers` as JSON before passing
+it to this transport; the server still executes the same read-only RPC and
+keeps the existing ranking and dietary rules. Telemetry keeps its existing RPC.
+
+Each attempt may take up to 60 seconds. A network error, timeout, HTTP 408/429
+or 5xx response allows one retry after 1.5 seconds, for a maximum of 121.5
+seconds. After 15 seconds the UI continues waiting and accepts a later response.
+Progress shows elapsed time and the retry/deadline countdown, not an estimate
+of server completion. Superseded requests and their timers are cancelled, and
+late callbacks cannot overwrite newer answers. Exhausted failures retain the
+previous cards with a warning and an explicit retry button.

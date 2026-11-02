@@ -309,6 +309,7 @@ SweetGift.ru | Core
             var error = data && typeof data === 'object'
               ? data
               : { message: String(data || response.statusText), status: response.status };
+            error.status = response.status;
             throw error;
           }
 
