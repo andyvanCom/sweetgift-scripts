@@ -1,7 +1,7 @@
 /* SweetGift.ru | Live Gift Quiz */
 (function(){
   'use strict';
-  var sourceScript=document.currentScript,ROOT='.sg-gift-quiz',KEY='sg_gift_quiz_v2',RPC='get_gift_quiz_recommendations',REQUEST_TIMEOUT=15000,CORE_URL=resolveCoreUrl();
+  var sourceScript=document.currentScript,ROOT='.sg-gift-quiz',KEY='sg_gift_quiz_v2',RPC='get_gift_quiz_recommendations',REQUEST_TIMEOUT=60000,RETRY_DELAY=1500,CORE_URL=resolveCoreUrl();
   var TYPE_MEDIA={},QS=[];
   function resolveCoreUrl(){
     if(sourceScript&&sourceScript.dataset.quizCore)return sourceScript.dataset.quizCore;
@@ -45,7 +45,78 @@
     function renderGuide(){var progress=qc().getQuizProgress(s.answers,s.editing);guide.innerHTML='<div class="sg-gq-guide-row"><span class="sg-gq-step">Шаг '+progress.current+' из '+progress.total+(progress.remaining?' · осталось '+progress.remaining:' · готово')+'</span><span class="sg-gq-found">'+(s.answers.gift_type?(s.total?'Подходит '+s.total+' вариантов':'Считаем варианты…'):'Начните с первого шага')+'</span></div><div class="sg-gq-progress"><span style="width:'+progress.percent+'%"></span></div>';}
     function renderQ(){var list=visible(s.answers),first=list.findIndex(function(q){return !s.answers[q[0]];});questions.innerHTML=list.map(function(q,i){var answer=s.answers[q[0]],editing=s.editing===q[0],open=editing||(!answer&&i===first),visual=q[0]==='gift_type';if(answer&&!editing)return '<section class="sg-gq-q is-done" data-key="'+q[0]+'"><button type="button" class="sg-gq-done"><span><span class="sg-gq-done-title">'+esc(q[1])+'</span><span class="sg-gq-done-value">'+esc(answerText(q))+'</span></span><span class="sg-gq-change">Изменить</span></button></section>';return '<section class="sg-gq-q" data-key="'+q[0]+'"'+(!open?' hidden':'')+'><h3>'+esc(q[1])+'</h3>'+(q[5]?'<p class="sg-gq-help">'+esc(q[5])+'</p>':'')+(q[0]==='budget'?budgetHtml():'<div class="sg-gq-options">'+q[2].map(function(o){var on=q[4]?Array.isArray(answer)&&answer.indexOf(o[0])>=0:answer===o[0],media=visual?(TYPE_MEDIA[o[0]]||[]):[];return '<button type="button" class="sg-gq-option'+(visual?' is-visual':'')+(on?' is-on':'')+'" data-value="'+o[0]+'">'+(visual?'<span class="sg-gq-visuals">'+media.map(function(src){return '<img src="'+esc(src)+'" alt="" loading="lazy">';}).join('')+'</span><span class="sg-gq-visual-label">'+esc(o[1])+'</span>':esc(o[1]))+'</button>';}).join('')+'</div>')+'<div class="sg-gq-actions">'+(!q[6]?'<button type="button" class="sg-gq-skip">Пропустить</button>':'')+(q[4]||q[0]==='budget'?'<button type="button" class="sg-gq-next">Продолжить</button>':'')+'</div></section>';}).join('');active.innerHTML=list.map(function(q){if(!s.answers[q[0]])return '';return '<button type="button" class="sg-gq-chip" data-key="'+q[0]+'">'+esc(answerText(q))+' ×</button>';}).join('');renderGuide();}
     function renderCards(){var shown=s.products.slice(0,s.expanded?all:limit);live.className='sg-gq-live is-visible';live.textContent='Найдено: '+s.total+' подходящих подарков — следующие ответы уточнят подборку';shareBox=null;shareAttempts=0;results.removeAttribute('aria-busy');results.innerHTML='<h3>Уже нашли '+s.total+' подходящих подарков</h3><p class="sg-gq-note">Каждый следующий ответ уточняет подборку.</p><div class="sg-gq-share-root"></div><div class="sg-kp-root"></div><div class="sg-gq-grid">'+shown.map(function(p,i){return '<a class="sg-gq-card" href="'+esc(p.url||p.product_key)+'" data-key="'+esc(p.product_key)+'" data-rank="'+(i+1)+'"><img class="sg-gq-img" src="'+esc(p.image||'')+'" alt="" loading="lazy"><span class="sg-gq-body"><span class="sg-gq-name">'+esc(p.title)+'</span><span class="sg-gq-price">'+price(p.price)+'</span><span class="sg-gq-match">'+(i?'': 'Лучший выбор — ')+Number(p.match_percent)+'% совпадения</span><span class="sg-gq-reason">'+esc((p.reasons||[]).join(' · '))+'</span></span></a>';}).join('')+'</div>'+(s.total>limit?'<button type="button" class="sg-gq-more">'+(s.expanded?'Показать четыре лучших':'Показать ещё подходящие подарки')+'</button>':'');var payload={source:'gift_quiz',productKeys:s.products.slice(0,12).map(function(p){return p.product_key;}).filter(Boolean),mount:results.querySelector('.sg-kp-root')};window.SG.proposalPending=window.SG.proposalPending||[];window.SG.proposalPending.push(payload);document.dispatchEvent(new CustomEvent('sg:proposal-selection',{detail:payload}));renderGuide(visible(s.answers));ensureShare();}
-    function recommend(){if(!s.answers.gift_type){s.products=[];s.total=0;live.className='sg-gq-live';live.textContent='';results.innerHTML='<div class="sg-gq-status">Выберите направление — сразу покажем первые варианты.</div>';return;}var seq=++s.seq,settled=false,started=Date.now(),phrases=searchPhrases();live.className='sg-gq-live is-visible is-loading';function updateProgress(){if(seq!==s.seq||settled){clearInterval(progressTimer);return;}var elapsed=Date.now()-started,remaining=Math.max(1,Math.ceil((REQUEST_TIMEOUT-elapsed)/1000)),phase=Math.min(phrases.length-1,Math.floor(elapsed/2500));live.textContent=phrases[phase]+' Осталось примерно '+remaining+' сек.';}var progressTimer=setInterval(updateProgress,1000);updateProgress();if(s.products.length){results.setAttribute('aria-busy','true');var note=results.querySelector('.sg-gq-note');if(note)note.textContent='Обновляем количество и варианты…';}else results.innerHTML='<div class="sg-gq-status">Подбираем первые варианты…</div>';function stopProgress(){clearInterval(progressTimer);clearTimeout(timer);}function failed(){if(seq!==s.seq||settled)return;settled=true;stopProgress();results.removeAttribute('aria-busy');live.className='sg-gq-live is-visible';live.textContent=s.total?'Найдено: '+s.total+' · не удалось уточнить подборку':'Подбор занял слишком много времени';if(s.products.length){var currentNote=results.querySelector('.sg-gq-note');if(currentNote)currentNote.textContent='Не удалось обновить варианты. Попробуйте ещё раз.';}else results.innerHTML='<div class="sg-gq-status">Не удалось загрузить подборку.<br><button type="button" class="sg-gq-more sg-gq-retry">Повторить подбор</button></div>';}var timer=setTimeout(failed,REQUEST_TIMEOUT);c().rpc(RPC,{p_answers:qc().toSupabaseAnswers(s.answers),p_limit:all},function(data){if(seq!==s.seq||settled)return;settled=true;stopProgress();s.products=(data&&data.products)||[];s.total=Number(data&&data.total||s.products.length);s.expanded=false;renderCards();track('quiz_results',s,{products:s.products.map(function(p,i){return {product_key:p.product_key,rank:i+1,score:p.score,reasons:p.reasons};}),total:s.total});},failed);}
+    function recommend(){
+      var seq=++s.seq;
+      if(s.cancelRequest)s.cancelRequest();
+      s.cancelRequest=null;
+      if(!s.answers.gift_type){
+        s.products=[];s.total=0;live.className='sg-gq-live';live.textContent='';
+        results.removeAttribute('aria-busy');
+        results.innerHTML='<div class="sg-gq-status">Выберите направление — сразу покажем первые варианты.</div>';
+        return;
+      }
+      var settled=false,started=Date.now(),attempt=0,attemptId=0,attemptStarted=started;
+      var controller=null,timer=0,retryTimer=0,progressTimer=0,phrases=searchPhrases();
+      var params={p_answers:qc().toSupabaseAnswers(s.answers),p_limit:all};
+      live.className='sg-gq-live is-visible is-loading';
+      if(s.products.length){
+        results.setAttribute('aria-busy','true');
+        var note=results.querySelector('.sg-gq-note');
+        if(note)note.textContent='Обновляем количество и варианты…';
+      }else results.innerHTML='<div class="sg-gq-status">Подбираем первые варианты…</div>';
+      function current(){return seq===s.seq&&!settled;}
+      function updateProgress(){
+        if(!current())return;
+        var elapsed=Date.now()-started,remaining=Math.max(0,Math.ceil((REQUEST_TIMEOUT-(Date.now()-attemptStarted))/1000));
+        var phase=Math.min(phrases.length-1,Math.floor(elapsed/2500));
+        var message=attempt>1?'Повторно загружаем подборку…':elapsed>=15000?'Загрузка занимает больше обычного. Продолжаем ждать…':phrases[phase];
+        live.textContent=message+' Прошло '+Math.floor(elapsed/1000)+' сек.'+(retryTimer?' Готовим повторную попытку.':' До '+(attempt<2?'повторной попытки':'завершения ожидания')+' — '+remaining+' сек.');
+      }
+      function stop(){clearInterval(progressTimer);clearTimeout(timer);clearTimeout(retryTimer);}
+      function abort(){if(controller&&typeof controller.abort==='function')controller.abort();controller=null;}
+      s.cancelRequest=function(){settled=true;attemptId+=1;stop();abort();};
+      function failed(){
+        if(!current())return;
+        settled=true;stop();results.removeAttribute('aria-busy');
+        live.className='sg-gq-live is-visible';
+        live.textContent=s.products.length?'Не удалось обновить подборку. Ниже — предыдущие варианты.':'Не удалось загрузить подборку. Проверьте соединение и попробуйте ещё раз.';
+        var retry='<button type="button" class="sg-gq-more sg-gq-retry">Повторить подбор</button>';
+        if(s.products.length){
+          var currentNote=results.querySelector('.sg-gq-note');
+          if(currentNote)currentNote.innerHTML='Показаны предыдущие варианты. '+retry;
+        }else results.innerHTML='<div class="sg-gq-status">Подборку можно запросить ещё раз.<br>'+retry+'</div>';
+      }
+      function run(){
+        if(!current())return;
+        retryTimer=0;attempt+=1;attemptStarted=Date.now();
+        var token=++attemptId,done=false;
+        function valid(){return current()&&token===attemptId&&!done;}
+        function rejected(error){
+          if(!valid())return;
+          done=true;clearTimeout(timer);abort();
+          var status=Number(error&&(error.status||error.statusCode));
+          var transient=!status||status===408||status===429||status>=500;
+          if(attempt<2&&transient){retryTimer=setTimeout(run,RETRY_DELAY);updateProgress();}else failed();
+        }
+        timer=setTimeout(function(){rejected({status:408});},REQUEST_TIMEOUT);
+        updateProgress();
+        function received(data){
+          if(!valid())return;
+          if(!data||!Array.isArray(data.products)){rejected({status:502});return;}
+          done=true;settled=true;stop();controller=null;
+          s.products=data.products;s.total=Number(data.total||s.products.length);s.expanded=false;
+          renderCards();
+          track('quiz_results',s,{products:s.products.map(function(p,i){return {product_key:p.product_key,rank:i+1,score:p.score,reasons:p.reasons};}),total:s.total});
+        }
+        try{
+          if(typeof c().rpcRead==='function'){
+            controller=c().rpcRead(RPC,{p_answers:JSON.stringify(params.p_answers),p_limit:params.p_limit},received,rejected);
+          }else controller=c().rpc(RPC,params,received,rejected);
+        }catch(error){rejected(error);}
+      }
+      progressTimer=setInterval(updateProgress,1000);
+      run();
+    }
     function skip(key){s.answers=qc().skipQuestion(s.answers,key);}
     questions.addEventListener('click',function(e){var section=e.target.closest('.sg-gq-q');if(!section)return;var key=section.dataset.key,q=QS.filter(function(x){return x[0]===key;})[0],done=e.target.closest('.sg-gq-done'),next=e.target.closest('.sg-gq-next'),skipButton=e.target.closest('.sg-gq-skip'),b=e.target.closest('.sg-gq-option');if(done){s.editing=key;renderQ();return;}if(skipButton){skip(key);s.editing='';save(s);toUrl(s.answers);renderQ();track('quiz_skip',s,{question:key});recommend();return;}if(next){if(!s.answers[key]){if(q&&q[6])return;skip(key);}s.editing='';save(s);toUrl(s.answers);renderQ();recommend();return;}if(!b)return;var changed=Boolean(s.answers[key]),value=b.dataset.value;s.answers=qc().applyAnswer(s.answers,key,value);s.editing=q&&q[4]?key:'';save(s);toUrl(s.answers);renderQ();track(changed?'quiz_change_answer':'quiz_answer',s,{question:key,value:s.answers[key]||null});if(key==='diet'&&s.answers.diet)track('quiz_complete',s,{});recommend();});
     var rangeTimer=0;questions.addEventListener('input',function(e){var input=e.target.closest('[data-budget]');if(!input)return;var budget=qc().BUDGET,min=Number(s.answers.budget_min)||budget.min,max=Number(s.answers.budget_max)||budget.max,value=Number(input.value);if(input.dataset.budget==='min')min=Math.min(value,max-budget.step);else max=Math.max(value,min+budget.step);s.answers=qc().applyAnswer(s.answers,'budget',{minimum:min,maximum:max});s.editing='budget';var box=input.closest('.sg-gq-q'),span=budget.max-budget.min;box.querySelector('.sg-gq-budget-values').innerHTML='<span>от '+price(min)+'</span><span>до '+price(max)+'</span>';var fill=box.querySelector('.sg-gq-range-fill');fill.style.left=((min-budget.min)/span*100)+'%';fill.style.right=(100-(max-budget.min)/span*100)+'%';save(s);toUrl(s.answers);renderGuide();clearTimeout(rangeTimer);rangeTimer=setTimeout(function(){recommend();},240);});
