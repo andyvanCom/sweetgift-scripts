@@ -12,11 +12,10 @@ SweetGift.ru | Top Pages
 
   window.SG = window.SG || {};
 
-  var VERSION = '1';
+  var VERSION = '3';
   var CSS_ID = 'sg-top-pages-css';
   var ROOT_SELECTOR = '.sg-top-detail';
   var READY_ATTRIBUTE = 'data-sg-top-pages-ready';
-  var WAITING_ATTRIBUTE = 'data-sg-top-pages-waiting';
   var EMPTY_MESSAGE = 'Пока недостаточно данных для формирования рейтинга.';
   var ERROR_MESSAGE = 'Не удалось загрузить рейтинг. Попробуйте обновить страницу.';
 
@@ -107,22 +106,6 @@ SweetGift.ru | Top Pages
     document.head.appendChild(style);
   }
 
-  function findList(data, targetUrl) {
-    var lists = data && data.lists ? data.lists : data;
-    var targetPath = normalizePath(targetUrl);
-    var i;
-
-    if (!lists || typeof lists.length !== 'number') return null;
-
-    for (i = 0; i < lists.length; i += 1) {
-      if (normalizePath(lists[i] && lists[i].url) === targetPath) {
-        return lists[i];
-      }
-    }
-
-    return null;
-  }
-
   function renderPeriods(period) {
     var periods = [
       ['today', 'Сегодня'],
@@ -200,13 +183,16 @@ SweetGift.ru | Top Pages
   }
 
   function requestData(root, period, targetUrl, attempt) {
-    window.SG.core.rpc(
-      'get_public_top_lists_page_period',
-      { p_period: period },
+    var timer = setTimeout(function () { if (controller) controller.abort(); }, 5000);
+    var controller = window.SG.core.rpcRead(
+      'get_public_top_snapshot',
+      { p_period: period, p_path: targetUrl },
       function (data) {
-        render(root, findList(data, targetUrl), period, targetUrl);
+        clearTimeout(timer);
+        render(root, Array.isArray(data) ? data[0] : null, period, targetUrl);
       },
       function (error) {
+        clearTimeout(timer);
         if (attempt === 0) {
           setTimeout(function () {
             requestData(root, period, targetUrl, 1);
@@ -222,27 +208,16 @@ SweetGift.ru | Top Pages
   }
 
   function loadOne(root) {
-    var period;
-    var targetUrl;
-
     if (root.getAttribute(READY_ATTRIBUTE) === '1') return;
 
-    if (!window.SG.core || typeof window.SG.core.rpc !== 'function' ||
-        typeof window.SG.core.escapeHtml !== 'function') {
-      if (root.getAttribute(WAITING_ATTRIBUTE) !== '1') {
-        root.setAttribute(WAITING_ATTRIBUTE, '1');
-        setTimeout(function () {
-          root.removeAttribute(WAITING_ATTRIBUTE);
-          loadOne(root);
-        }, 300);
-      }
+    root.setAttribute(READY_ATTRIBUTE, '1');
+    if (!window.SG.core || typeof window.SG.core.rpcRead !== 'function') {
+      root.textContent = ERROR_MESSAGE;
       return;
     }
 
-    root.removeAttribute(WAITING_ATTRIBUTE);
-    root.setAttribute(READY_ATTRIBUTE, '1');
-    period = getPeriodFromUrl();
-    targetUrl = root.getAttribute('data-list') || '';
+    var period = getPeriodFromUrl();
+    var targetUrl = normalizePath(root.getAttribute('data-list') || window.location.pathname);
     root.innerHTML = '<div class="sg-top-detail-loading">Загрузка рейтинга...</div>';
     requestData(root, period, targetUrl, 0);
   }

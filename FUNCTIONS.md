@@ -41,7 +41,8 @@ Backend `/admin`: одноразовый код на email, проверка adm
 | `get_gift_selector_catalog()` | корзины и ингредиенты для подбора |
 | `get_gift_box_selector_catalog()` | наборы/боксы и ингредиенты |
 | `get_gift_quiz_recommendations(answers, limit)` | ранжирование единого квиза |
-| `get_public_top_lists_page_period(period)` | товарные рейтинги |
+| `get_public_top_lists_page_period(period)` | полная выдача товарных рейтингов для совместимости |
+| `get_public_top_snapshot(p_period, p_path)` | готовая выдача одной страницы товарного рейтинга за выбранный период |
 | `get_public_top_articles_page_period(period, limit)` | рейтинг статей |
 | `get_product_activity_badges(keys)` | агрегированная активность товаров |
 | `get_recent_product_activity()` | данные live popup |
@@ -102,7 +103,7 @@ Frontend не имеет прямого write-доступа к исходным
 
 | Время | Job | Действие |
 |---|---|---|
-| `5 * * * *` | `refresh-top-lists-hourly` | обновить рейтинги |
+| `5 * * * *` | `refresh-top-lists-hourly` | обновить рейтинги и готовые ответы страниц одной транзакцией |
 | `0 4 * * *` | `import-yml-products-daily` | импорт каталога |
 | `30 4 * * *` | `import-articles-index-daily` | импорт до 100 статей за пакет |
 | `45 4 * * *` | `classify-articles-daily` | темы и сущности |

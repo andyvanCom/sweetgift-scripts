@@ -82,7 +82,7 @@
       "name": "top-pages",
       "enabled": true,
       "src": "sweetgift-top-pages.js",
-      "version": "2",
+      "version": "3",
       "pages": ["/top/*"]
     },
     {
