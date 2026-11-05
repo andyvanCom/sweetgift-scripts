@@ -12,9 +12,13 @@ SweetGift.ru | Top Pages
 
   window.SG = window.SG || {};
 
-  var VERSION = '3';
+  var VERSION = '4';
+  var script = document.currentScript;
+  var endpoint = script && script.getAttribute('data-sg-top-endpoint');
+  var publicKey = script && script.getAttribute('data-sg-top-key');
+  var standalone = Boolean(endpoint && publicKey);
   var CSS_ID = 'sg-top-pages-css';
-  var ROOT_SELECTOR = '.sg-top-detail';
+  var ROOT_SELECTOR = standalone ? '[data-sg-top-inline]' : '.sg-top-detail:not([data-sg-top-inline])';
   var READY_ATTRIBUTE = 'data-sg-top-pages-ready';
   var EMPTY_MESSAGE = 'Пока недостаточно данных для формирования рейтинга.';
   var ERROR_MESSAGE = 'Не удалось загрузить рейтинг. Попробуйте обновить страницу.';
@@ -24,7 +28,11 @@ SweetGift.ru | Top Pages
   };
 
   function escapeHtml(text) {
-    return window.SG.core.escapeHtml(text);
+    if (!standalone) return window.SG.core.escapeHtml(text);
+
+    return String(text || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   }
 
   function getPeriodFromUrl() {
@@ -182,11 +190,37 @@ SweetGift.ru | Top Pages
     root.innerHTML = html + '</div>';
   }
 
+  function readSnapshot(period, targetUrl, onSuccess, onError) {
+    if (!standalone) {
+      return window.SG.core.rpcRead(
+        'get_public_top_snapshot',
+        { p_period: period, p_path: targetUrl },
+        onSuccess,
+        onError
+      );
+    }
+
+    var controller = new AbortController();
+    var query = new URLSearchParams({
+      p_period: period,
+      p_path: targetUrl,
+      apikey: publicKey
+    });
+    fetch(endpoint + '?' + query, { signal: controller.signal })
+      .then(function (response) {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      })
+      .then(onSuccess)
+      .catch(onError);
+    return controller;
+  }
+
   function requestData(root, period, targetUrl, attempt) {
     var timer = setTimeout(function () { if (controller) controller.abort(); }, 5000);
-    var controller = window.SG.core.rpcRead(
-      'get_public_top_snapshot',
-      { p_period: period, p_path: targetUrl },
+    var controller = readSnapshot(
+      period,
+      targetUrl,
       function (data) {
         clearTimeout(timer);
         render(root, Array.isArray(data) ? data[0] : null, period, targetUrl);
@@ -211,7 +245,9 @@ SweetGift.ru | Top Pages
     if (root.getAttribute(READY_ATTRIBUTE) === '1') return;
 
     root.setAttribute(READY_ATTRIBUTE, '1');
-    if (!window.SG.core || typeof window.SG.core.rpcRead !== 'function') {
+    if (standalone) {
+      root.classList.add('sg-top-detail');
+    } else if (!window.SG.core || typeof window.SG.core.rpcRead !== 'function') {
       root.textContent = ERROR_MESSAGE;
       return;
     }
@@ -249,7 +285,10 @@ SweetGift.ru | Top Pages
     });
   }
 
-  if (document.readyState === 'loading') {
+  if (standalone) {
+    // The Tilda block places this script immediately after the rating container.
+    init();
+  } else if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
       init();
       observe();
