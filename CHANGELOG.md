@@ -4,6 +4,20 @@
 
 ---
 
+# 2026-11-09
+
+## Durable checkout attribution context
+
+- original Yandex ClientID/`_ym_uid`, external referrer and landing are frozen
+  before internal navigation can replace them;
+- the last meaningful external or advertising touch is retained separately,
+  while direct returns and internal links do not overwrite it;
+- checkout storage accepts the expanded privacy-safe context without query
+  strings, fragments, credentials or customer contact data;
+- the order-attribution module version is increased for CDN refresh.
+
+---
+
 # 2026-09-15
 
 ## Expanded CRM order context

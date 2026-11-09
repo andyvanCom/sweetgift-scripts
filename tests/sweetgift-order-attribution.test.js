@@ -5,27 +5,32 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const source=fs.readFileSync(path.join(__dirname,'..','sweetgift-order-attribution.js'),'utf8');
 const trackerSource=fs.readFileSync(path.join(__dirname,'..','sweetgift-order-tracker.js'),'utf8');
-function setup({url='https://sweetgift.ru/catalog?yclid=9876543210123456789&utm_source=yandex&utm_medium=cpc&utm_campaign=123456789',store=new Map(),blocked=false,client='1234567890123456789',host}={}){
+function setup({url='https://sweetgift.ru/catalog?yclid=9876543210123456789&utm_source=yandex&utm_medium=cpc&utm_campaign=123456789',store=new Map(),blocked=false,client='1234567890123456789',host,referrer='',cookie='_ym_uid=1234567890123456789'}={}){
   const listeners={},calls=[],values=store,timers=[],form={tagName:'FORM',tildaOrderId:'T202610-1234567890',elements:[],getAttribute:()=> 'y',closest:()=>null,querySelector(selector){const name=selector.match(/name="([^"]+)"/)[1];return this.elements.find(f=>f.name===name)||null;},appendChild(f){this.elements.push(f);}};
   const window={location:new URL(url),localStorage:{getItem:k=>{if(blocked)throw Error();return values.get(k)||null;},setItem:(k,v)=>{if(blocked)throw Error();values.set(k,v);}},sessionStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}},tcart:{products:[{name:'Gift',quantity:1,price:1200}],amount:1200},SG:{core:{rpc:(name,payload,success)=>{calls.push({name,payload});success({ok:true});}}},ym:(counter,method,callback)=>{assert.equal(counter,18246130);assert.equal(method,'getClientID');if(client)callback(client);}};
   if(host)window.location=new URL('https://'+host);
-  const document={cookie:'_ym_uid=1234567890123456789',referrer:'',title:'catalog',createElement:()=>({setAttribute(k,v){this[k]=v;}}),addEventListener:(name,fn)=>listeners[name]=fn,querySelector:()=>form};
+  const document={cookie,referrer,title:'catalog',createElement:()=>({setAttribute(k,v){this[k]=v;}}),addEventListener:(name,fn)=>listeners[name]=fn,querySelector:()=>form};
   const context={window,document,URL,URLSearchParams,WeakMap,Date,setTimeout:fn=>timers.push(fn),console};vm.runInNewContext(source,context);
   return {window,document,listeners,calls,form,context,values};
 }
-test('uses getClientID string and captures first yclid, UTM, visit and clean landing',()=>{
-  const f=setup({url:'https://sweetgift.ru/catalog?yclid=9876543210123456789&utm_source=yandex&utm_medium=cpc&utm_campaign=123456789&phone=79991234567'}),a=f.window.SG.orderAttribution.context();
-  assert.equal(a.client_id,'1234567890123456789');assert.equal(a.yclid,'9876543210123456789');assert.equal(a.utm_campaign,'123456789');assert.equal(a.campaign_id,undefined);assert.equal(a.landing_page,'https://sweetgift.ru/catalog');assert.ok(Number.isFinite(Date.parse(a.visited_at)));assert.doesNotMatch(JSON.stringify(a),/79991234567/);
+test('uses getClientID string and captures first yclid, UTM, referrer, visit and clean landing',()=>{
+  const f=setup({url:'https://sweetgift.ru/catalog?yclid=9876543210123456789&utm_source=yandex&utm_medium=cpc&utm_campaign=123456789&phone=79991234567',referrer:'https://yandex.ru/search/?text=private'}),a=f.window.SG.orderAttribution.context();
+  assert.equal(a.client_id,'1234567890123456789');assert.equal(a.ym_uid,'1234567890123456789');assert.equal(a.yclid,'9876543210123456789');assert.equal(a.utm_campaign,'123456789');assert.equal(a.utm_referrer,'https://yandex.ru/search/');assert.equal(a.campaign_id,undefined);assert.equal(a.landing_page,'https://sweetgift.ru/catalog');assert.equal(a.last_touch_landing_page,'https://sweetgift.ru/catalog');assert.equal(a.last_touch_referrer,'https://yandex.ru/search/');assert.equal(a.attribution_version,'2');assert.ok(Number.isFinite(Date.parse(a.visited_at)));assert.ok(Number.isFinite(Date.parse(a.last_touch_at)));assert.doesNotMatch(JSON.stringify(a),/79991234567|private/);
 });
 test('return via internal/direct navigation keeps the original source and ClientID',()=>{
-  const first=setup(),original=JSON.stringify(first.window.SG.orderAttribution.context()),second=setup({url:'https://sweetgift.ru/cart?utm_source=internal',store:first.values,client:'1111111111111111'});
+  const first=setup(),original=JSON.stringify(first.window.SG.orderAttribution.context()),second=setup({url:'https://sweetgift.ru/cart',referrer:'https://sweetgift.ru/catalog',store:first.values,client:'1111111111111111',cookie:'_ym_uid=1111111111111111'});
   assert.equal(JSON.stringify(second.window.SG.orderAttribution.context()),original);
+});
+test('later external campaign updates last significant touch without replacing first touch',()=>{
+  const first=setup(),original=first.window.SG.orderAttribution.context();
+  const second=setup({url:'https://sweetgift.ru/podarochnye-korziny?yclid=2222222222222222&utm_source=yandex&utm_campaign=second',referrer:'https://yandex.ru/search/?text=gift',store:first.values,client:'2222222222222222',cookie:'_ym_uid=2222222222222222'}),updated=second.window.SG.orderAttribution.context();
+  assert.equal(updated.client_id,original.client_id);assert.equal(updated.ym_uid,original.ym_uid);assert.equal(updated.yclid,original.yclid);assert.equal(updated.utm_campaign,original.utm_campaign);assert.equal(updated.last_touch_yclid,'2222222222222222');assert.equal(updated.last_touch_utm_campaign,'second');assert.equal(updated.last_touch_landing_page,'https://sweetgift.ru/podarochnye-korziny');assert.equal(updated.last_touch_referrer,'https://yandex.ru/search/');
 });
 test('blocked storage still preserves first-touch context through checkout in memory',()=>{
   const f=setup({blocked:true});f.window.location=new URL('https://sweetgift.ru/cart');assert.equal(f.window.SG.orderAttribution.context().utm_source,'yandex');
 });
 test('does not fabricate identity when counter/cookie unavailable',()=>{
-  const f=setup({client:null});f.document.cookie='';const a=f.window.SG.orderAttribution.context();assert.equal(a.client_id,undefined);assert.equal(a.ym_uid,undefined);
+  const f=setup({client:null,cookie:''});const a=f.window.SG.orderAttribution.context();assert.equal(a.client_id,undefined);assert.equal(a.ym_uid,undefined);
 });
 test('does not run on an admin/API/foreign host',()=>{
   const f=setup({host:'api.sweetgift.ru'});assert.equal(f.window.SG.orderAttribution,undefined);
