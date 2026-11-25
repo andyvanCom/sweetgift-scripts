@@ -256,8 +256,8 @@ async function getDashboard(days: number) {
   };
 }
 
-const actions: Record<string, { name?: string; query?: string; rpc?: string }> = {
-  products: { name: "import-yml-products" },
+const actions: Record<string, { name?: string; query?: string; rpc?: string; secretEnv?: string }> = {
+  products: { name: "import-yml-products", secretEnv: "PRODUCT_IMPORT_RUN_SECRET" },
   articles: { name: "import-articles-index", query: "?mode=daily&limit=100" },
   classify: { name: "classify-articles" },
   articleProducts: { rpc: "request_article_product_cache_refresh" },
@@ -282,14 +282,26 @@ async function runAction(action: string) {
     return json({ ok: true, action, status: 200, result: data });
   }
 
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (target.secretEnv) {
+    const secret = Deno.env.get(target.secretEnv);
+    if (!secret) {
+      return json({
+        ok: false,
+        action,
+        error: "Не настроен серверный ключ запуска импорта товаров",
+      }, 503);
+    }
+    headers["x-sweetgift-run-secret"] = secret;
+  } else {
+    headers["x-report-secret"] = RUN_SECRET;
+  }
+
   const response = await fetch(
     `${SUPABASE_URL}/functions/v1/${target.name!}${target.query || ""}`,
     {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-report-secret": RUN_SECRET,
-      },
+      headers,
       body: "{}",
     },
   );

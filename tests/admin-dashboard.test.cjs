@@ -121,3 +121,49 @@ test('Tilda shell is valid JavaScript and uses bounded Russian proxy loading', (
   assert.match(shell,/controller\.abort\(\); \}, 15000/);
   assert.doesNotMatch(shell,/functions\.supabase\.co/);
 });
+
+function server({role='admin', productSecret='product-only-test', fetch}={}) {
+  let handler;
+  const env={SUPABASE_URL:'https://project.example.test',SUPABASE_SERVICE_ROLE_KEY:'service-test',REPORT_RUN_SECRET:'report-only-test'};
+  if (productSecret) env.PRODUCT_IMPORT_RUN_SECRET=productSecret;
+  const context=vm.createContext({Request,Response,URL,Headers,TextEncoder,Map,Date,console,fetch,
+    createClient:()=>({auth:{getUser:async()=>({data:{user:{app_metadata:{role}}},error:null})}}),
+    Deno:{env:{get:key=>env[key]},serve:callback=>{handler=callback;}},
+  });
+  vm.runInContext(stripTypeScriptTypes(source.replace(/^import .*;\n/gm,'')),context);
+  return action=>handler(new Request('https://project.example.test/functions/v1/admin-dashboard/api/run',{
+    method:'POST',headers:{authorization:'Bearer user-test','content-type':'application/json'},body:JSON.stringify({action}),
+  }));
+}
+
+test('admin product import passes its dedicated server-only secret', async () => {
+  let calls=0;
+  const invoke=server({fetch:async(url,options)=>{
+    calls++; assert.equal(url,'https://project.example.test/functions/v1/import-yml-products');
+    assert.equal(options.method,'POST'); assert.equal(options.headers['x-sweetgift-run-secret'],'product-only-test');
+    assert.equal(options.headers['x-report-secret'],undefined);
+    assert.equal(options.headers.authorization,undefined);
+    return Response.json({ok:true});
+  }});
+  const result=await invoke('products'); assert.equal(result.status,200); assert.equal(calls,1);
+  assert.doesNotMatch(await result.text(),/product-only-test|report-only-test|service-test/);
+  assert.doesNotMatch(html,/PRODUCT_IMPORT_RUN_SECRET|product-only-test/);
+});
+
+test('missing product invocation secret fails before any network request', async () => {
+  let calls=0;const invoke=server({productSecret:null,fetch:async()=>{calls++;throw new Error('unexpected')}});
+  const result=await invoke('products');assert.equal(result.status,503);assert.equal(calls,0);
+  assert.match((await result.json()).error,/Не настроен серверный ключ/);
+});
+
+test('non-admin cannot trigger product import', async () => {
+  let calls=0;const invoke=server({role:'user',fetch:async()=>{calls++;throw new Error('unexpected')}});
+  const result=await invoke('products');assert.equal(result.status,401);assert.equal(calls,0);
+});
+
+test('other existing function actions retain their report authentication', async () => {
+  const invoked=[];
+  const invoke=server({fetch:async(url,options)=>{invoked.push(url);assert.equal(options.headers['x-report-secret'],'report-only-test');assert.equal(options.headers['x-sweetgift-run-secret'],undefined);return Response.json({ok:true});}});
+  for (const action of ['articles','classify','report'])assert.equal((await invoke(action)).status,200);
+  assert.equal(invoked.length,3);
+});
