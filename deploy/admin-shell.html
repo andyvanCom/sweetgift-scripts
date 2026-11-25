@@ -1,0 +1,110 @@
+<!-- SweetGift Admin Dashboard -->
+<div id="sg-admin-shell" class="sg-admin-shell">
+  <div id="sg-admin-loading" class="sg-admin-loading">
+    <div class="sg-admin-spinner"></div>
+    <div>Загрузка панели SweetGift…</div>
+  </div>
+
+  <iframe
+    id="sg-admin-frame"
+    class="sg-admin-frame"
+    title="Панель управления SweetGift"
+    sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
+    referrerpolicy="no-referrer"
+  ></iframe>
+</div>
+
+<style>
+.sg-admin-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 680px;
+  margin-left: calc(50% - 50vw);
+  overflow: hidden;
+  background: #f8f1ef;
+}
+
+.sg-admin-frame {
+  display: none;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #f8f1ef;
+}
+
+.sg-admin-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 30px;
+  color: #75696b;
+  font-family: Arial, sans-serif;
+  font-size: 15px;
+  text-align: center;
+}
+
+.sg-admin-spinner {
+  width: 42px;
+  height: 42px;
+  border: 4px solid #eadfdd;
+  border-top-color: #a9284d;
+  border-radius: 50%;
+  animation: sgAdminSpin 0.8s linear infinite;
+}
+
+@keyframes sgAdminSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .sg-admin-shell {
+    min-height: 620px;
+  }
+}
+</style>
+
+<script>
+(function () {
+  var dashboardUrl = 'https://app.sweetgift.ru/sg-admin/';
+  var frame = document.getElementById('sg-admin-frame');
+  var loading = document.getElementById('sg-admin-loading');
+  async function loadPanel() {
+    loading.innerHTML = '<div class="sg-admin-spinner"></div><div>Загрузка панели SweetGift…</div>';
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 15000);
+    try {
+      var response = await fetch(dashboardUrl, {method: 'GET', mode: 'cors', cache: 'no-store', signal: controller.signal});
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      var html = await response.text();
+      if (html.indexOf('id="emailForm"') === -1) throw new Error('Неожиданный ответ сервера');
+      frame.srcdoc = html;
+      frame.style.display = 'block';
+      loading.style.display = 'none';
+    } catch (error) {
+      loading.innerHTML = '<strong style="color:#a9284d">Не удалось загрузить панель</strong>' +
+        '<div>Проверьте соединение и повторите загрузку.</div>';
+      var details = document.createElement('div');
+      details.style.fontSize = '12px';
+      details.textContent = error.name === 'AbortError' ? 'Сервер не ответил за 15 секунд.' : error.message;
+      loading.appendChild(details);
+      var retry = document.createElement('button');
+      retry.type = 'button';
+      retry.textContent = 'Повторить загрузку';
+      retry.onclick = loadPanel;
+      loading.appendChild(retry);
+    } finally { clearTimeout(timer); }
+  }
+  loadPanel();
+})();
+</script>
