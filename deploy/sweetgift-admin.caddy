@@ -1,0 +1,61 @@
+# Import only inside the existing app.sweetgift.ru site, before its fallback.
+# Supabase still validates every session and app_metadata.role on protected APIs.
+handle /sg-admin/* {
+	route {
+		header {
+			>Cache-Control "no-store"
+			>Access-Control-Allow-Origin "*"
+			>Access-Control-Allow-Headers "authorization,content-type,apikey"
+			>Access-Control-Allow-Methods "GET,POST,OPTIONS"
+		}
+		@preflight method OPTIONS
+		respond @preflight "" 204
+
+		@verify {
+			method POST
+			path /sg-admin/auth/verify
+		}
+		handle @verify {
+			rewrite * /auth/v1/verify
+			reverse_proxy https://rvgvbxipccbkytmhltmi.supabase.co {
+				header_up Host rvgvbxipccbkytmhltmi.supabase.co
+				transport http {
+					dial_timeout 5s
+					response_header_timeout 20s
+				}
+			}
+		}
+		@refresh {
+			method POST
+			path /sg-admin/auth/token
+			query grant_type=refresh_token
+		}
+		handle @refresh {
+			rewrite * /auth/v1/token
+			reverse_proxy https://rvgvbxipccbkytmhltmi.supabase.co {
+				header_up Host rvgvbxipccbkytmhltmi.supabase.co
+				transport http {
+					dial_timeout 5s
+					response_header_timeout 20s
+				}
+			}
+		}
+		@dashboard path /sg-admin/ /sg-admin/api/dashboard /sg-admin/api/send-login-code /sg-admin/api/run /sg-admin/api/catalog-csv
+		handle @dashboard {
+			route {
+				uri strip_prefix /sg-admin
+				rewrite * /functions/v1/admin-dashboard{uri}
+				reverse_proxy https://rvgvbxipccbkytmhltmi.supabase.co {
+					header_up Host rvgvbxipccbkytmhltmi.supabase.co
+					transport http {
+						dial_timeout 5s
+						response_header_timeout 65s
+					}
+				}
+			}
+		}
+		handle {
+			respond "Not found" 404
+		}
+	}
+}
